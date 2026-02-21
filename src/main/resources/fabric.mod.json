@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "autoenchants",
+  "version": "${version}",
+  "name": "Auto Enchants",
+  "description": "Adds Precise Shooter and Automatic enchantments for bows/crossbows.",
+  "authors": ["Codex"],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.example.autoenchants.AutoEnchantsMod"
+    ]
+  },
+  "mixins": [
+    "autoenchants.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "minecraft": "~1.20.4",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.example.autoenchants.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "BowItemMixin",
+    "CrossbowItemInvoker",
+    "CrossbowItemMixin",
+    "FireworkRocketEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
