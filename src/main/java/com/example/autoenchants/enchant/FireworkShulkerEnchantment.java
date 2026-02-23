@@ -5,28 +5,28 @@ import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentTarget;
 import net.minecraft.entity.EquipmentSlot;
 
-public class BlastFireworkEnchantment extends Enchantment {
-    public BlastFireworkEnchantment() {
+public class FireworkShulkerEnchantment extends Enchantment {
+    public FireworkShulkerEnchantment() {
         super(Rarity.VERY_RARE, EnchantmentTarget.CROSSBOW, new EquipmentSlot[]{EquipmentSlot.MAINHAND});
     }
 
     @Override
     public int getMinPower(int level) {
-        return 20 + (level - 1) * 10;
+        return 22 + (level - 1) * 8;
     }
 
     @Override
     public int getMaxPower(int level) {
-        return getMinPower(level) + 25;
+        return getMinPower(level) + 24;
     }
 
     @Override
     public int getMaxLevel() {
-        return 5;
+        return 6;
     }
 
     @Override
     protected boolean canAccept(Enchantment other) {
-        return super.canAccept(other) && other != AutoEnchantsMod.FIREWORK_SHULKER;
+        return super.canAccept(other) && other != AutoEnchantsMod.BLAST_FIREWORK;
     }
 }

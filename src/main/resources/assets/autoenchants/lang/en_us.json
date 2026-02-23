@@ -2,5 +2,16 @@
   "enchantment.autoenchants.precise_shooter": "Precise Shooter",
   "enchantment.autoenchants.automatic": "Automatic",
   "enchantment.autoenchants.triple_burst": "Triple Burst",
-  "enchantment.autoenchants.blast_firework": "Blast Firework"
+  "enchantment.autoenchants.blast_firework": "Blast Firework",
+  "enchantment.autoenchants.firework_shulker": "Shulker Firework",
+  "enchantment.autoenchants.firework_golem": "Golem Firework",
+  "enchantment.autoenchants.critical_fangs": "Critical Fangs",
+  "enchantment.autoenchants.thermal_helmet": "Thermal Helmet",
+  "enchantment.autoenchants.requiem": "Requiem",
+  "enchantment.autoenchants.sky_bombard": "Sky Bombard",
+  "enchantment.autoenchants.reaction_armor": "Reactive Armor",
+  "enchantment.autoenchants.squid_iron_fist": "Squid Iron Fist",
+  "enchantment.autoenchants.strange_wand": "Strange Wand",
+  "effect.autoenchants.reaction_armor_cooldown": "Reactive Armor Cooldown",
+  "effect.autoenchants.squid_iron_fist_cooldown": "Squid Iron Fist Cooldown"
 }

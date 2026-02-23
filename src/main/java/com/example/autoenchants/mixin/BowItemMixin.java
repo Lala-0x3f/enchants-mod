@@ -36,6 +36,7 @@ public abstract class BowItemMixin {
     ) {
         int level = EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_SHOOTER, stack);
         float boostedSpeed = speed * AutoEnchantsMod.getPreciseShooterMultiplier(level);
-        projectile.setVelocity(shooter, pitch, yaw, roll, boostedSpeed, divergence);
+        float improvedDivergence = AutoEnchantsMod.getPreciseShooterDivergence(divergence, level);
+        projectile.setVelocity(shooter, pitch, yaw, roll, boostedSpeed, improvedDivergence);
     }
 }
