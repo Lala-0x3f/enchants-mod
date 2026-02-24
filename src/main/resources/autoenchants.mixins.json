@@ -7,11 +7,16 @@
     "CreeperEntityMixin",
     "CrossbowItemInvoker",
     "CrossbowItemMixin",
+    "EndermanEntityMixin",
     "FireworkRocketEntityMixin",
     "LivingEntityMixin",
+    "MobEntityAccessor",
     "ShulkerBulletEntityMixin",
     "TntEntityMixin",
     "TridentEntityMixin"
+  ],
+  "client": [
+    "client.ShulkerBulletEntityRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

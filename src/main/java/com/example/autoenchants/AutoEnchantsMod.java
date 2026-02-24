@@ -3,9 +3,12 @@ package com.example.autoenchants;
 import com.example.autoenchants.enchant.AutomaticEnchantment;
 import com.example.autoenchants.enchant.BlastFireworkEnchantment;
 import com.example.autoenchants.enchant.CriticalFangsEnchantment;
+import com.example.autoenchants.enchant.FireworkCreeperEnchantment;
 import com.example.autoenchants.enchant.FireworkGolemEnchantment;
 import com.example.autoenchants.enchant.FireworkShulkerEnchantment;
+import com.example.autoenchants.enchant.GuidanceEnchantment;
 import com.example.autoenchants.enchant.PreciseShooterEnchantment;
+import com.example.autoenchants.enchant.PrecisionGuidanceEnchantment;
 import com.example.autoenchants.enchant.ReactionArmorEnchantment;
 import com.example.autoenchants.enchant.RequiemEnchantment;
 import com.example.autoenchants.enchant.SkyBombardEnchantment;
@@ -13,9 +16,13 @@ import com.example.autoenchants.enchant.StrangeWandEnchantment;
 import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
+import com.example.autoenchants.entity.PeekabooShellEntity;
+import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
@@ -24,10 +31,15 @@ import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityDimensions;
+import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.mob.EvokerFangsEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.CompassItem;
+import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
@@ -45,6 +57,7 @@ import net.minecraft.world.World;
 
 public class AutoEnchantsMod implements ModInitializer {
     public static final String MOD_ID = "autoenchants";
+    public static final String PEEKABOO_SHELL_SPARK_TAG = "autoenchants_peekaboo_shell_spark";
 
     public static Enchantment PRECISE_SHOOTER;
     public static Enchantment AUTOMATIC;
@@ -52,18 +65,34 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment BLAST_FIREWORK;
     public static Enchantment FIREWORK_SHULKER;
     public static Enchantment FIREWORK_GOLEM;
+    public static Enchantment FIREWORK_CREEPER;
     public static Enchantment CRITICAL_FANGS;
     public static Enchantment THERMAL_HELMET;
     public static Enchantment REQUIEM;
     public static Enchantment SKY_BOMBARD;
+    public static Enchantment GUIDANCE;
+    public static Enchantment PRECISE_GUIDANCE;
     public static Enchantment REACTION_ARMOR;
     public static Enchantment SQUID_IRON_FIST;
     public static Enchantment STRANGE_WAND;
+    public static Item TARGET_POINTER;
+    public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
+    public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
 
     @Override
     public void onInitialize() {
+        PEEKABOO_SHELL = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("peekaboo_shell"),
+                FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, PeekabooShellEntity::new)
+                        .dimensions(EntityDimensions.fixed(1.0f, 1.0f))
+                        .trackRangeBlocks(80)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(PEEKABOO_SHELL, PeekabooShellEntity.createShulkerAttributes());
+
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
                 id("precise_shooter"),
@@ -100,6 +129,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new FireworkGolemEnchantment()
         );
 
+        FIREWORK_CREEPER = Registry.register(
+                Registries.ENCHANTMENT,
+                id("firework_creeper"),
+                new FireworkCreeperEnchantment()
+        );
+
         CRITICAL_FANGS = Registry.register(
                 Registries.ENCHANTMENT,
                 id("critical_fangs"),
@@ -124,6 +159,18 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SkyBombardEnchantment()
         );
 
+        GUIDANCE = Registry.register(
+                Registries.ENCHANTMENT,
+                id("guidance"),
+                new GuidanceEnchantment()
+        );
+
+        PRECISE_GUIDANCE = Registry.register(
+                Registries.ENCHANTMENT,
+                id("precise_guidance"),
+                new PrecisionGuidanceEnchantment()
+        );
+
         REACTION_ARMOR = Registry.register(
                 Registries.ENCHANTMENT,
                 id("reaction_armor"),
@@ -140,6 +187,18 @@ public class AutoEnchantsMod implements ModInitializer {
                 Registries.ENCHANTMENT,
                 id("strange_wand"),
                 new StrangeWandEnchantment()
+        );
+
+        TARGET_POINTER = Registry.register(
+                Registries.ITEM,
+                id("target_pointer"),
+                new CompassItem(new Item.Settings().maxCount(1))
+        );
+
+        LOCKED_ON = Registry.register(
+                Registries.STATUS_EFFECT,
+                id("locked_on"),
+                new LockedOnEffect()
         );
 
         REACTION_ARMOR_COOLDOWN = Registry.register(
@@ -160,6 +219,7 @@ public class AutoEnchantsMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(HostilePerceptionHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(ReactionArmorHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(SquidIronFistHandler::tick);
+        ServerTickEvents.END_SERVER_TICK.register(LockedOnHandler::tick);
         UseItemCallback.EVENT.register((player, world, hand) -> {
             ItemStack stack = player.getStackInHand(hand);
             if (world.isClient || !(stack.getItem() instanceof CrossbowItem)) {

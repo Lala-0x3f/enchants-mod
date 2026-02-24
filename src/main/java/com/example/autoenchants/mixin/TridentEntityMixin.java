@@ -1,6 +1,7 @@
 package com.example.autoenchants.mixin;
 
 import com.example.autoenchants.AutoEnchantsMod;
+import com.example.autoenchants.LockedOnHandler;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.Entity;
@@ -73,8 +74,8 @@ public abstract class TridentEntityMixin {
         if (target == null || !target.isAlive()) {
             return;
         }
-        // Keep a short glowing effect alive while this trident is actively locked.
-        target.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 20, 0, false, false, true));
+        // 锁定状态优先目标并持续保活。
+        LockedOnHandler.applyLockedAndGlow(target, 20);
 
         Vec3d toTarget = target.getPos().add(0.0d, target.getHeight() * 0.6d, 0.0d).subtract(self.getPos());
         if (toTarget.lengthSquared() < 1.0E-5d) {
@@ -178,6 +179,21 @@ public abstract class TridentEntityMixin {
             return null;
         }
         forward = forward.normalize();
+
+        if (world instanceof ServerWorld serverWorld) {
+            LivingEntity lockedTarget = LockedOnHandler.findBestLockedTargetInCone(
+                    serverWorld,
+                    self.getPos(),
+                    forward,
+                    26.0d + level * 8.0d,
+                    50.0d,
+                    self.getOwner()
+            );
+            if (lockedTarget != null) {
+                autoenchants$lockedTarget = lockedTarget.getUuid();
+                return lockedTarget;
+            }
+        }
 
         double range = 22.0d + level * 10.0d;
         List<HostileEntity> candidates = world.getEntitiesByClass(

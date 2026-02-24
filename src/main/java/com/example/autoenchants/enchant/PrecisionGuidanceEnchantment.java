@@ -1,25 +1,24 @@
 package com.example.autoenchants.enchant;
 
-import com.example.autoenchants.AutoEnchantsMod;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentTarget;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.ItemStack;
 
-public class FireworkGolemEnchantment extends Enchantment {
-    public FireworkGolemEnchantment() {
+public class PrecisionGuidanceEnchantment extends Enchantment {
+    public PrecisionGuidanceEnchantment() {
         super(Rarity.VERY_RARE, EnchantmentTarget.CROSSBOW, new EquipmentSlot[]{EquipmentSlot.MAINHAND});
     }
 
     @Override
     public int getMinPower(int level) {
-        return 26;
+        return 24 + (level - 1) * 10;
     }
 
     @Override
     public int getMaxPower(int level) {
-        return 60;
+        return getMinPower(level) + 26;
     }
 
     @Override
@@ -30,10 +29,5 @@ public class FireworkGolemEnchantment extends Enchantment {
     @Override
     public boolean isAcceptableItem(ItemStack stack) {
         return stack.getItem() instanceof CrossbowItem;
-    }
-
-    @Override
-    protected boolean canAccept(Enchantment other) {
-        return super.canAccept(other) && other != AutoEnchantsMod.FIREWORK_CREEPER;
     }
 }

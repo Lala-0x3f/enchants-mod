@@ -35,6 +35,7 @@ import net.minecraft.entity.projectile.thrown.PotionEntity;
 import net.minecraft.entity.projectile.thrown.SnowballEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.block.AbstractFireBlock;
+import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
@@ -59,12 +60,14 @@ import java.util.UUID;
 
 public final class SquidIronFistHandler {
     private static final double DETECTION_RANGE = 10.0d;
+    private static final int THREAT_SCAN_INTERVAL_TICKS = 2;
     private static final double INTERCEPT_DISTANCE = 1.2d;
     private static final double INTERCEPT_SPEED = 1.7d;
     private static final int INTERCEPT_TTL = 40;
     private static final String ZERO_CD_NBT_KEY = ReactionArmorHandler.getZeroCooldownNbtKey();
     private static final Map<UUID, Long> COOLDOWN_UNTIL = new HashMap<>();
     private static final Map<UUID, InterceptorState> ACTIVE_INTERCEPTORS = new HashMap<>();
+    private static final Map<UUID, Long> NEXT_THREAT_SCAN_AT = new HashMap<>();
     private static EntityAttribute SQUID_SCALE_ATTRIBUTE;
     private static boolean SCALE_ATTR_RESOLVED = false;
 
@@ -76,12 +79,21 @@ public final class SquidIronFistHandler {
         tickInterceptors(server, now);
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             if (!player.isAlive() || player.isSpectator()) {
+                UUID playerId = player.getUuid();
+                COOLDOWN_UNTIL.remove(playerId);
+                NEXT_THREAT_SCAN_AT.remove(playerId);
                 continue;
             }
             int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.SQUID_IRON_FIST, player);
             if (level <= 0 || !isOffCooldown(player, now)) {
                 continue;
             }
+            UUID playerId = player.getUuid();
+            Long nextScanAt = NEXT_THREAT_SCAN_AT.get(playerId);
+            if (nextScanAt != null && now < nextScanAt) {
+                continue;
+            }
+            NEXT_THREAT_SCAN_AT.put(playerId, now + THREAT_SCAN_INTERVAL_TICKS);
 
             Entity threat = findIncomingThreat(player, DETECTION_RANGE);
             if (threat == null) {
@@ -142,14 +154,14 @@ public final class SquidIronFistHandler {
         ServerWorld world = player.getServerWorld();
         Vec3d eye = player.getPos().add(0.0d, player.getStandingEyeHeight() * 0.7d, 0.0d);
         Box box = player.getBoundingBox().expand(range);
-        List<LivingEntity> entities = world.getEntitiesByClass(
-                LivingEntity.class,
+        List<MobEntity> entities = world.getEntitiesByClass(
+                MobEntity.class,
                 box,
                 living -> living.isAlive() && !living.isRemoved()
         );
-        LivingEntity best = null;
+        MobEntity best = null;
         double bestScore = -Double.MAX_VALUE;
-        for (LivingEntity entity : entities) {
+        for (MobEntity entity : entities) {
             if (!isApsThreat(entity, player)) {
                 continue;
             }
@@ -225,7 +237,7 @@ public final class SquidIronFistHandler {
         squid.setInvulnerable(true);
         squid.setVelocity(launchDir.multiply(INTERCEPT_SPEED));
         applySquidScale(squid, 0.2d);
-        orientTowardsDirection(squid, launchDir);
+        orientSquidTowardsDirection(squid, launchDir);
         world.spawnEntity(squid);
 
         world.spawnParticles(ParticleTypes.LARGE_SMOKE, spawnPos.x, spawnPos.y, spawnPos.z, 4, 0.06d, 0.06d, 0.06d, 0.02d);
@@ -267,7 +279,7 @@ public final class SquidIronFistHandler {
             }
             Vec3d direction = toTarget.normalize();
             squid.setVelocity(direction.multiply(INTERCEPT_SPEED));
-            orientTowardsDirection(squid, direction);
+            orientSquidTowardsDirection(squid, direction);
             squid.velocityModified = true;
             world.spawnParticles(ParticleTypes.GLOW, squid.getX(), squid.getBodyY(0.5d), squid.getZ(), 3, 0.03d, 0.03d, 0.03d, 0.0d);
             return false;
@@ -324,8 +336,13 @@ public final class SquidIronFistHandler {
     }
 
     private static boolean isOffCooldown(LivingEntity entity, long nowTicks) {
-        Long until = COOLDOWN_UNTIL.get(entity.getUuid());
-        return until == null || nowTicks >= until;
+        StatusEffectInstance cooldown = entity.getStatusEffect(AutoEnchantsMod.SQUID_IRON_FIST_COOLDOWN);
+        if (cooldown != null && cooldown.getDuration() > 0) {
+            COOLDOWN_UNTIL.put(entity.getUuid(), nowTicks + cooldown.getDuration());
+            return false;
+        }
+        COOLDOWN_UNTIL.remove(entity.getUuid());
+        return true;
     }
 
     private static void startCooldown(ServerPlayerEntity player, int level, long nowTicks) {
@@ -467,6 +484,17 @@ public final class SquidIronFistHandler {
         entity.setPitch(pitch);
         entity.prevYaw = yaw;
         entity.prevPitch = pitch;
+    }
+
+    private static void orientSquidTowardsDirection(GlowSquidEntity squid, Vec3d direction) {
+        Vec3d dir = direction.normalize();
+        float yaw = (float) (MathHelper.atan2(dir.z, dir.x) * (180.0d / Math.PI)) - 90.0f;
+        float pitch = (float) (-(MathHelper.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * (180.0d / Math.PI)));
+        // 鱿鱼模型的前向轴与常规生物不同，补偿 90 度避免“头朝上”。
+        squid.setYaw(yaw);
+        squid.setPitch(pitch + 90.0f);
+        squid.prevYaw = yaw;
+        squid.prevPitch = pitch + 90.0f;
     }
 
     private static void applySquidScale(GlowSquidEntity squid, double scale) {

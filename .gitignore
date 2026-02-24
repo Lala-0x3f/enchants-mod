@@ -5,3 +5,4 @@ bin/
 *.log
 *.zip
 gradle-*/
+.serena/

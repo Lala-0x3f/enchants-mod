@@ -7,8 +7,8 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.ItemStack;
 
-public class FireworkGolemEnchantment extends Enchantment {
-    public FireworkGolemEnchantment() {
+public class FireworkCreeperEnchantment extends Enchantment {
+    public FireworkCreeperEnchantment() {
         super(Rarity.VERY_RARE, EnchantmentTarget.CROSSBOW, new EquipmentSlot[]{EquipmentSlot.MAINHAND});
     }
 
@@ -34,6 +34,6 @@ public class FireworkGolemEnchantment extends Enchantment {
 
     @Override
     protected boolean canAccept(Enchantment other) {
-        return super.canAccept(other) && other != AutoEnchantsMod.FIREWORK_CREEPER;
+        return super.canAccept(other) && other != AutoEnchantsMod.FIREWORK_GOLEM;
     }
 }

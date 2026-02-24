@@ -247,8 +247,13 @@ public final class ReactionArmorHandler {
     }
 
     private static boolean isOffCooldown(LivingEntity entity, long nowTicks) {
-        Long until = COOLDOWN_UNTIL.get(entity.getUuid());
-        return until == null || nowTicks >= until;
+        StatusEffectInstance cooldown = entity.getStatusEffect(AutoEnchantsMod.REACTION_ARMOR_COOLDOWN);
+        if (cooldown != null && cooldown.getDuration() > 0) {
+            COOLDOWN_UNTIL.put(entity.getUuid(), nowTicks + cooldown.getDuration());
+            return false;
+        }
+        COOLDOWN_UNTIL.remove(entity.getUuid());
+        return true;
     }
 
     private static void startCooldown(LivingEntity entity, int level, long nowTicks) {

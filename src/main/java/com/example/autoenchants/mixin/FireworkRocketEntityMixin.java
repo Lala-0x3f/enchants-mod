@@ -1,5 +1,7 @@
 package com.example.autoenchants.mixin;
 
+import com.example.autoenchants.AutoEnchantsMod;
+import com.example.autoenchants.LockedOnHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
@@ -10,6 +12,7 @@ import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.projectile.FireworkRocketEntity;
 import net.minecraft.entity.projectile.ShulkerBulletEntity;
 import net.minecraft.block.Blocks;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.BlockHitResult;
@@ -17,6 +20,7 @@ import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,29 +30,79 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 @Mixin(FireworkRocketEntity.class)
 public abstract class FireworkRocketEntityMixin {
     private static final String BLAST_FIREWORK_TAG_PREFIX = "autoenchants_blast_firework_lv_";
     private static final String FIREWORK_SHULKER_TAG_PREFIX = "autoenchants_firework_shulker_lv_";
     private static final String FIREWORK_GOLEM_TAG = "autoenchants_firework_golem";
+    private static final String FIREWORK_CREEPER_TAG = "autoenchants_firework_creeper";
+    private static final String PRECISE_GUIDANCE_TAG = "autoenchants_precise_guidance";
     private static final String SHULKER_BULLET_FX_TAG = "autoenchants_firework_shulker_bullet_fx";
     private static final String BLAST_LAUNCHED_TNT_TAG = "autoenchants_blast_launched_tnt";
     private static final String BLAST_LAUNCHED_CREEPER_TAG = "autoenchants_blast_launched_creeper";
+    private static final int GUIDANCE_DELAY_TICKS = 5;
+    private static final int GUIDANCE_REFRESH_INTERVAL = 18;
+    private static final int GUIDANCE_REACQUIRE_INTERVAL = 4;
+    private static final float GUIDANCE_MAX_TURN_DEGREES = 1.0f;
+
+    private int autoenchants$guidanceAge;
+    private int autoenchants$nextAcquireTick;
+    private UUID autoenchants$guidedTargetId;
 
     @Inject(method = "onEntityHit", at = @At("HEAD"))
     private void autoenchants$blastOnEntityHit(EntityHitResult hitResult, CallbackInfo ci) {
+        autoenchants$refreshGuidedTargetLockIfNeeded();
         autoenchants$handleTaggedHit();
     }
 
     @Inject(method = "onBlockHit", at = @At("HEAD"))
     private void autoenchants$blastOnBlockHit(BlockHitResult hitResult, CallbackInfo ci) {
+        autoenchants$refreshGuidedTargetLockIfNeeded();
         autoenchants$handleTaggedHit();
     }
 
     @Inject(method = "explode", at = @At("HEAD"))
     private void autoenchants$spawnShulkerOnVanillaExplosion(CallbackInfo ci) {
         autoenchants$spawnShulkerBulletsIfTagged();
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void autoenchants$guideTowardLockedTarget(CallbackInfo ci) {
+        Entity self = (Entity) (Object) this;
+        if (self.getWorld().isClient() || !self.isAlive() || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
+            return;
+        }
+        autoenchants$guidanceAge++;
+        if (autoenchants$guidanceAge <= GUIDANCE_DELAY_TICKS) {
+            return;
+        }
+        if (!(self.getWorld() instanceof ServerWorld serverWorld)) {
+            return;
+        }
+        Vec3d velocity = self.getVelocity();
+        if (velocity.lengthSquared() < 1.0E-6d) {
+            return;
+        }
+
+        LivingEntity target = autoenchants$getGuidedTarget(serverWorld, self);
+        if (target == null) {
+            return;
+        }
+
+        Vec3d currentDir = velocity.normalize();
+        Vec3d desiredDir = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+        if (desiredDir.lengthSquared() < 1.0E-6d) {
+            return;
+        }
+        Vec3d turnedDir = autoenchants$rotateTowardsByMaxAngle(currentDir, desiredDir.normalize(), Math.toRadians(GUIDANCE_MAX_TURN_DEGREES));
+        self.setVelocity(turnedDir.multiply(velocity.length()));
+        self.velocityModified = true;
+
+        if (autoenchants$guidanceAge % GUIDANCE_REFRESH_INTERVAL == 0) {
+            LockedOnHandler.applyLockedAndGlow(target, 20);
+        }
     }
 
     private void autoenchants$detonateBlastIfTagged() {
@@ -74,7 +128,8 @@ public abstract class FireworkRocketEntityMixin {
         self.getCommandTags().removeIf(tag ->
                 tag.startsWith(BLAST_FIREWORK_TAG_PREFIX)
                         || tag.startsWith(FIREWORK_SHULKER_TAG_PREFIX)
-                        || tag.equals(FIREWORK_GOLEM_TAG));
+                        || tag.equals(FIREWORK_GOLEM_TAG)
+                        || tag.equals(FIREWORK_CREEPER_TAG));
         self.discard();
     }
 
@@ -94,13 +149,65 @@ public abstract class FireworkRocketEntityMixin {
         if (shulkerLevel > 0) {
             autoenchants$spawnShulkerBulletsIfTagged();
             autoenchants$spawnGolemIfTagged();
+            autoenchants$spawnCreeperIfTagged();
             self.discard();
             return;
         }
 
         if (self.getCommandTags().contains(FIREWORK_GOLEM_TAG)) {
             autoenchants$spawnGolemIfTagged();
+            autoenchants$spawnCreeperIfTagged();
             self.discard();
+            return;
+        }
+
+        if (self.getCommandTags().contains(FIREWORK_CREEPER_TAG)) {
+            autoenchants$spawnCreeperIfTagged();
+            self.discard();
+        }
+    }
+
+    private LivingEntity autoenchants$getGuidedTarget(ServerWorld world, Entity self) {
+        if (autoenchants$guidedTargetId != null) {
+            Entity existing = world.getEntity(autoenchants$guidedTargetId);
+            if (existing instanceof LivingEntity living && living.isAlive() && living.hasStatusEffect(AutoEnchantsMod.LOCKED_ON)) {
+                return living;
+            }
+            autoenchants$guidedTargetId = null;
+        }
+        if (autoenchants$guidanceAge < autoenchants$nextAcquireTick) {
+            return null;
+        }
+        autoenchants$nextAcquireTick = autoenchants$guidanceAge + GUIDANCE_REACQUIRE_INTERVAL;
+        Vec3d velocity = self.getVelocity();
+        if (velocity.lengthSquared() < 1.0E-6d) {
+            return null;
+        }
+        LivingEntity found = LockedOnHandler.findBestLockedTargetInCone(
+                world,
+                self.getPos(),
+                velocity.normalize(),
+                42.0d,
+                45.0d,
+                self
+        );
+        if (found != null) {
+            autoenchants$guidedTargetId = found.getUuid();
+        }
+        return found;
+    }
+
+    private void autoenchants$refreshGuidedTargetLockIfNeeded() {
+        Entity self = (Entity) (Object) this;
+        if (!(self.getWorld() instanceof ServerWorld serverWorld) || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
+            return;
+        }
+        if (autoenchants$guidedTargetId == null) {
+            return;
+        }
+        Entity target = serverWorld.getEntity(autoenchants$guidedTargetId);
+        if (target instanceof LivingEntity living && living.isAlive()) {
+            LockedOnHandler.applyLockedAndGlow(living, 20);
         }
     }
 
@@ -158,6 +265,29 @@ public abstract class FireworkRocketEntityMixin {
         self.getWorld().spawnEntity(golem);
         autoenchants$spawnGolemParticles(self.getWorld(), golem.getX(), golem.getY(), golem.getZ());
         self.removeCommandTag(FIREWORK_GOLEM_TAG);
+    }
+
+    private void autoenchants$spawnCreeperIfTagged() {
+        Entity self = (Entity) (Object) this;
+        if (self.getWorld().isClient() || !self.getCommandTags().contains(FIREWORK_CREEPER_TAG)) {
+            return;
+        }
+
+        CreeperEntity creeper = EntityType.CREEPER.create(self.getWorld());
+        if (creeper == null) {
+            return;
+        }
+
+        creeper.refreshPositionAndAngles(self.getX(), self.getY(), self.getZ(), self.getYaw(), self.getPitch());
+        boolean charged = self.getWorld().random.nextFloat() < 0.1f;
+        if (charged) {
+            NbtCompound nbt = creeper.writeNbt(new NbtCompound());
+            nbt.putBoolean("powered", true);
+            creeper.readNbt(nbt);
+        }
+        self.getWorld().spawnEntity(creeper);
+        autoenchants$spawnCreeperParticles(self.getWorld(), creeper.getX(), creeper.getY(), creeper.getZ(), charged);
+        self.removeCommandTag(FIREWORK_CREEPER_TAG);
     }
 
     private int autoenchants$triggerSympatheticDetonation(World world, Entity source, int blastLevel) {
@@ -286,6 +416,16 @@ public abstract class FireworkRocketEntityMixin {
         serverWorld.spawnParticles(ParticleTypes.POOF, x, y + 1.0d, z, 30, 0.45d, 0.6d, 0.45d, 0.02d);
     }
 
+    private void autoenchants$spawnCreeperParticles(World world, double x, double y, double z, boolean charged) {
+        if (!(world instanceof ServerWorld serverWorld)) {
+            return;
+        }
+        serverWorld.spawnParticles(ParticleTypes.CLOUD, x, y + 0.2d, z, 18, 0.5d, 0.2d, 0.5d, 0.02d);
+        if (charged) {
+            serverWorld.spawnParticles(ParticleTypes.ELECTRIC_SPARK, x, y + 0.9d, z, 28, 0.35d, 0.45d, 0.35d, 0.01d);
+        }
+    }
+
     private int autoenchants$findTagLevel(Entity self, String prefix) {
         int level = 0;
         for (String tag : self.getCommandTags()) {
@@ -308,5 +448,19 @@ public abstract class FireworkRocketEntityMixin {
             case 1 -> Direction.Axis.Y;
             default -> Direction.Axis.Z;
         };
+    }
+
+    private Vec3d autoenchants$rotateTowardsByMaxAngle(Vec3d from, Vec3d to, double maxAngleRad) {
+        double dot = MathHelper.clamp(from.dotProduct(to), -1.0d, 1.0d);
+        double angle = Math.acos(dot);
+        if (angle <= maxAngleRad || angle < 1.0E-6d) {
+            return to;
+        }
+        double t = maxAngleRad / angle;
+        Vec3d mixed = from.multiply(1.0d - t).add(to.multiply(t));
+        if (mixed.lengthSquared() < 1.0E-8d) {
+            return to;
+        }
+        return mixed.normalize();
     }
 }
