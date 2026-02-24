@@ -27,7 +27,7 @@ public abstract class CrossbowItemMixin {
     private static final String PRECISE_GUIDANCE_TAG = "autoenchants_precise_guidance";
 
     @Redirect(
-            method = "loadProjectile",
+            method = "loadProjectiles",
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/entity/LivingEntity;getProjectileType(Lnet/minecraft/item/ItemStack;)Lnet/minecraft/item/ItemStack;"

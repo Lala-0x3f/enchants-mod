@@ -7,9 +7,12 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.ActiveTargetGoal;
+import net.minecraft.entity.ai.pathing.Path;
+import net.minecraft.entity.ai.pathing.PathNode;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.ShulkerEntity;
 import net.minecraft.entity.passive.GolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -20,6 +23,7 @@ import net.minecraft.item.DyeItem;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.particle.DustParticleEffect;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.ActionResult;
@@ -38,12 +42,14 @@ import java.util.List;
 import java.util.Optional;
 
 public class PeekabooShellEntity extends ShulkerEntity {
+    private static final double TARGET_SEARCH_RANGE = 32.0d;
     private static final int SEARCH_INTERVAL_TICKS = 20;
     private static final int IDLE_PEEK_AMOUNT = 35;
     private static final int COMBAT_PEEK_AMOUNT = 100;
     private static final int MIN_SHOT_INTERVAL = 20;
     private static final int MAX_SHOT_INTERVAL = 110;
-    private static final int DAY_TELEPORT_INTERVAL = 120;
+    private static final int NON_COMBAT_TELEPORT_COOLDOWN_MIN = 260;
+    private static final int NON_COMBAT_TELEPORT_COOLDOWN_MAX = 420;
     private static final int PURR_INTERVAL_MIN = 80;
     private static final int PURR_INTERVAL_MAX = 180;
     private static final float CLOSED_DAMAGE_FACTOR = 0.35f;
@@ -51,18 +57,28 @@ public class PeekabooShellEntity extends ShulkerEntity {
     private static final int SOCIAL_INTERVAL_MAX = 60;
     private static final float STACK_TRIGGER_CHANCE = 0.18f;
     private static final int MAX_STACK_SIZE = 8;
+    private static final double MAX_ENGAGE_PATH_DISTANCE = TARGET_SEARCH_RANGE * 1.5d;
+    private static final int OBSERVE_TICKS_MIN = 20;
+    private static final int OBSERVE_TICKS_MAX = 45;
+    private static final float FULL_HEALTH_EPSILON = 0.001f;
+    private static final float[] HAPPY_ARPEGGIO_PITCHES = new float[]{0.63f, 0.75f, 0.84f, 1.0f, 1.26f};
+    private static final int HAPPY_ARPEGGIO_INTERVAL_TICKS = 6;
 
     private int shotCooldownTicks = MIN_SHOT_INTERVAL;
     private int searchCooldownTicks = 5;
-    private int dayTeleportCooldownTicks = DAY_TELEPORT_INTERVAL;
+    private int dayTeleportCooldownTicks = NON_COMBAT_TELEPORT_COOLDOWN_MIN;
     private int purrCooldownTicks = 60;
     private int socialCooldownTicks = 20;
     private int topStepNudgeCooldownTicks = 0;
     private int happySpinTicks = 0;
+    private int observeTicks = 0;
+    private int happyArpeggioStep = 0;
+    private boolean happyArpeggioAscending = true;
 
     public PeekabooShellEntity(EntityType<? extends PeekabooShellEntity> entityType, World world) {
         super(entityType, world);
         this.experiencePoints = 8;
+        this.resetNonCombatTeleportCooldown();
     }
 
     @Override
@@ -83,6 +99,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
         if (this.happySpinTicks > 0) {
             this.setBodyYaw(this.getBodyYaw() + 24.0f);
             this.setHeadYaw(this.getHeadYaw() + 24.0f);
+            this.playHappyArpeggioTick();
             this.happySpinTicks--;
         }
 
@@ -99,10 +116,21 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
 
         if (target != null) {
+            if (this.observeTicks > 0) {
+                this.observeTicks--;
+                this.setPeekAmountRaw(0);
+                return;
+            }
             this.setPeekAmountRaw(COMBAT_PEEK_AMOUNT);
             if (--this.shotCooldownTicks <= 0) {
                 this.shotCooldownTicks = this.random.nextBetween(MIN_SHOT_INTERVAL, MAX_SHOT_INTERVAL);
-                this.fireSparkVolley(target);
+                if (this.isTargetWithinEngagePathDistance(target)) {
+                    this.fireSparkVolley(target);
+                    this.observeTicks = this.random.nextBetween(OBSERVE_TICKS_MIN, OBSERVE_TICKS_MAX);
+                    this.setPeekAmountRaw(0);
+                } else {
+                    this.setTarget(null);
+                }
             }
             return;
         }
@@ -122,7 +150,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
         this.tryTopStepNudge();
         if (--this.dayTeleportCooldownTicks <= 0) {
-            this.dayTeleportCooldownTicks = DAY_TELEPORT_INTERVAL;
+            this.resetNonCombatTeleportCooldown();
             this.tryNonCombatTeleportPreference();
         }
     }
@@ -136,8 +164,11 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
         if (attacker instanceof ShulkerBulletEntity bullet
                 && bullet.getCommandTags().contains(AutoEnchantsMod.PEEKABOO_SHELL_SPARK_TAG)) {
-            this.tryTeleport();
+            this.tryTeleportWithBehaviorSound(1.0f, 1.08f);
             return false;
+        }
+        if (this.getHealth() <= this.getMaxHealth() * 0.25f) {
+            this.tryTeleportWithBehaviorSound(1.0f, 0.95f);
         }
 
         boolean shellClosed = this.dataTracker.get(PEEK_AMOUNT) <= 0;
@@ -151,7 +182,15 @@ public class PeekabooShellEntity extends ShulkerEntity {
             }
             amount *= CLOSED_DAMAGE_FACTOR;
         }
-        return super.damage(source, amount);
+        boolean damaged = super.damage(source, amount);
+        if (damaged) {
+            if (this.dataTracker.get(PEEK_AMOUNT) <= 0) {
+                this.playSound(SoundEvents.ENTITY_SHULKER_HURT_CLOSED, 0.85f, 0.95f + this.random.nextFloat() * 0.1f);
+            } else {
+                this.playSound(SoundEvents.ENTITY_SHULKER_HURT, 0.85f, 0.95f + this.random.nextFloat() * 0.1f);
+            }
+        }
+        return damaged;
     }
 
     @Override
@@ -169,12 +208,38 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
 
         if (stack.isOf(Items.CHORUS_FRUIT)) {
+            if (this.dataTracker.get(PEEK_AMOUNT) <= 0) {
+                this.playSound(SoundEvents.ENTITY_SHULKER_CLOSE, 0.7f, 1.1f);
+                return ActionResult.FAIL;
+            }
             if (!this.getWorld().isClient()) {
-                float before = this.getHealth();
+                ServerWorld serverWorld = (ServerWorld) this.getWorld();
                 this.heal(6.0f);
-                if (before < this.getMaxHealth() && this.getHealth() >= this.getMaxHealth()) {
-                    this.happySpinTicks = 60;
-                    this.playSound(SoundEvents.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.9f, 1.2f);
+                this.playSound(SoundEvents.ENTITY_GENERIC_EAT, 0.75f, 0.95f + this.random.nextFloat() * 0.15f);
+                serverWorld.spawnParticles(
+                        ParticleTypes.HEART,
+                        this.getX(),
+                        this.getBodyY(0.8d),
+                        this.getZ(),
+                        5,
+                        0.35d,
+                        0.2d,
+                        0.35d,
+                        0.02d
+                );
+                if (this.getHealth() >= this.getMaxHealth() - FULL_HEALTH_EPSILON) {
+                    this.startHappySpin();
+                    serverWorld.spawnParticles(
+                            ParticleTypes.HAPPY_VILLAGER,
+                            this.getX(),
+                            this.getBodyY(0.9d),
+                            this.getZ(),
+                            8,
+                            0.4d,
+                            0.25d,
+                            0.4d,
+                            0.03d
+                    );
                 }
                 if (!player.getAbilities().creativeMode) {
                     stack.decrement(1);
@@ -183,6 +248,54 @@ public class PeekabooShellEntity extends ShulkerEntity {
             return ActionResult.success(this.getWorld().isClient());
         }
         return super.interactMob(player, hand);
+    }
+
+    private void startHappySpin() {
+        this.happySpinTicks = 60;
+        this.happyArpeggioAscending = this.random.nextBoolean();
+        this.happyArpeggioStep = this.happyArpeggioAscending ? 0 : HAPPY_ARPEGGIO_PITCHES.length - 1;
+        this.playSound(SoundEvents.ENTITY_ALLAY_AMBIENT_WITH_ITEM, 0.9f, 1.2f);
+    }
+
+    private void playHappyArpeggioTick() {
+        if (this.getWorld().isClient() || this.happySpinTicks % HAPPY_ARPEGGIO_INTERVAL_TICKS != 0) {
+            return;
+        }
+        int idx = this.happyArpeggioStep;
+        float pitch = HAPPY_ARPEGGIO_PITCHES[idx] * (0.99f + this.random.nextFloat() * 0.04f);
+        this.playSound(SoundEvents.BLOCK_NOTE_BLOCK_BELL.value(), 0.5f, pitch);
+        if (this.happyArpeggioAscending) {
+            if (this.happyArpeggioStep >= HAPPY_ARPEGGIO_PITCHES.length - 1) {
+                this.happyArpeggioAscending = false;
+                if (HAPPY_ARPEGGIO_PITCHES.length > 1) {
+                    this.happyArpeggioStep--;
+                }
+            } else {
+                this.happyArpeggioStep++;
+            }
+        } else {
+            if (this.happyArpeggioStep <= 0) {
+                this.happyArpeggioAscending = true;
+                if (HAPPY_ARPEGGIO_PITCHES.length > 1) {
+                    this.happyArpeggioStep++;
+                }
+            } else {
+                this.happyArpeggioStep--;
+            }
+        }
+        if (this.getWorld() instanceof ServerWorld serverWorld) {
+            serverWorld.spawnParticles(
+                    ParticleTypes.NOTE,
+                    this.getX(),
+                    this.getBodyY(1.0d),
+                    this.getZ(),
+                    2,
+                    this.random.nextDouble(),
+                    0.0d,
+                    0.0d,
+                    1.0d
+            );
+        }
     }
 
     @Override
@@ -231,8 +344,8 @@ public class PeekabooShellEntity extends ShulkerEntity {
     private LivingEntity findPriorityTarget() {
         List<LivingEntity> candidates = this.getWorld().getEntitiesByClass(
                 LivingEntity.class,
-                this.getBoundingBox().expand(32.0d),
-                this::isValidCombatTarget
+                this.getBoundingBox().expand(TARGET_SEARCH_RANGE),
+                target -> this.isValidCombatTarget(target) && this.isTargetWithinEngagePathDistance(target)
         );
         if (candidates.isEmpty()) {
             return null;
@@ -266,12 +379,41 @@ public class PeekabooShellEntity extends ShulkerEntity {
         return target instanceof RaiderEntity || target instanceof HostileEntity || target instanceof CreeperEntity;
     }
 
+    private boolean isTargetWithinEngagePathDistance(LivingEntity target) {
+        if (target == null || !target.isAlive()) {
+            return false;
+        }
+        if (!(target instanceof MobEntity mobTarget)) {
+            return this.squaredDistanceTo(target) <= MAX_ENGAGE_PATH_DISTANCE * MAX_ENGAGE_PATH_DISTANCE;
+        }
+        Path path = mobTarget.getNavigation().findPathTo(this, 0);
+        if (path == null) {
+            return false;
+        }
+
+        double pathDistance = 0.0d;
+        Vec3d previous = mobTarget.getPos();
+        for (int i = 0; i < path.getLength(); i++) {
+            PathNode node = path.getNode(i);
+            Vec3d nodePos = new Vec3d(node.x + 0.5d, node.y, node.z + 0.5d);
+            pathDistance += previous.distanceTo(nodePos);
+            if (pathDistance > MAX_ENGAGE_PATH_DISTANCE) {
+                return false;
+            }
+            previous = nodePos;
+        }
+        pathDistance += previous.distanceTo(this.getPos());
+        return pathDistance <= MAX_ENGAGE_PATH_DISTANCE;
+    }
+
     private void tryNonCombatTeleportPreference() {
         if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
         if (serverWorld.getRegistryKey() != World.OVERWORLD) {
-            this.tryTeleport();
+            return;
+        }
+        if (this.isComfortableIdleSpot(serverWorld)) {
             return;
         }
 
@@ -280,7 +422,36 @@ public class PeekabooShellEntity extends ShulkerEntity {
         if (preferred != null && this.tryTeleportToTopFace(serverWorld, preferred)) {
             return;
         }
-        this.tryTeleport();
+        if (this.random.nextFloat() < 0.35f) {
+            this.tryTeleportWithBehaviorSound(0.9f, 1.0f);
+        }
+    }
+
+    private boolean isComfortableIdleSpot(ServerWorld world) {
+        BlockPos current = this.getBlockPos();
+        BlockPos groundPos = current.down();
+        BlockState ground = world.getBlockState(groundPos);
+        if (!ground.isSideSolidFullSquare(world, groundPos, Direction.UP) || isForbiddenAttachBlock(ground)) {
+            return false;
+        }
+        if (!world.isAir(current.up())) {
+            return false;
+        }
+
+        boolean sunnyDay = world.isDay() && !world.isRaining();
+        if (sunnyDay) {
+            return world.isSkyVisible(current.up());
+        }
+
+        BlockPos bed = this.findBedNearby(world);
+        return bed == null || bed.getSquaredDistance(current) <= 100.0d;
+    }
+
+    private void resetNonCombatTeleportCooldown() {
+        this.dayTeleportCooldownTicks = this.random.nextBetween(
+                NON_COMBAT_TELEPORT_COOLDOWN_MIN,
+                NON_COMBAT_TELEPORT_COOLDOWN_MAX
+        );
     }
 
     private boolean tryCuriousStacking() {
@@ -334,6 +505,9 @@ public class PeekabooShellEntity extends ShulkerEntity {
         if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
             return false;
         }
+        if (!this.isUpperShellInStack()) {
+            return false;
+        }
         PlayerEntity nearest = serverWorld.getClosestPlayer(this, 4.5d);
         if (nearest == null || nearest.isSpectator()) {
             return false;
@@ -356,8 +530,25 @@ public class PeekabooShellEntity extends ShulkerEntity {
                 return true;
             }
         }
-        this.tryTeleport();
+        this.tryTeleportWithBehaviorSound(0.9f, 1.15f);
         return true;
+    }
+
+    private boolean isUpperShellInStack() {
+        List<PeekabooShellEntity> nearbyStack = this.getWorld().getEntitiesByClass(
+                PeekabooShellEntity.class,
+                this.getBoundingBox().expand(0.35d, MAX_STACK_SIZE * 1.2d, 0.35d),
+                shell -> shell != this
+                        && shell.isAlive()
+                        && Math.abs(shell.getX() - this.getX()) < 0.35d
+                        && Math.abs(shell.getZ() - this.getZ()) < 0.35d
+        );
+        for (PeekabooShellEntity shell : nearbyStack) {
+            if (shell.getY() < this.getY() - 0.45d) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void tryTopStepNudge() {
@@ -495,11 +686,20 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     public void triggerEmergencyTeleport() {
-        this.tryTeleport();
+        this.tryTeleportWithBehaviorSound(1.0f, 1.0f);
+    }
+
+    private boolean tryTeleportWithBehaviorSound(float volume, float pitch) {
+        boolean teleported = this.tryTeleport();
+        if (teleported) {
+            this.playSound(SoundEvents.ENTITY_SHULKER_TELEPORT, volume, pitch);
+        }
+        return teleported;
     }
 
     @Override
     public DyeColor getColor() {
-        return this.getVariant().orElse(DyeColor.PURPLE);
+        DyeColor color = super.getColor();
+        return color != null ? color : DyeColor.PURPLE;
     }
 }
