@@ -8,6 +8,8 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.passive.AbstractHorseEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonEntity;
+import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.mob.EvokerFangsEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -16,6 +18,7 @@ import net.minecraft.entity.projectile.FireworkRocketEntity;
 import net.minecraft.entity.projectile.LlamaSpitEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.entity.projectile.ArrowEntity;
+import net.minecraft.entity.projectile.DragonFireballEntity;
 import net.minecraft.entity.projectile.FireballEntity;
 import net.minecraft.entity.projectile.ShulkerBulletEntity;
 import net.minecraft.entity.projectile.SpectralArrowEntity;
@@ -131,9 +134,7 @@ public final class ReactionArmorHandler {
         for (ProjectileEntity projectile : projectiles) {
             Entity owner = projectile.getOwner();
             boolean hostileOwner = owner instanceof LivingEntity livingOwner && isThreatToVictim(livingOwner, victim);
-            boolean specialHostileProjectile = projectile instanceof ShulkerBulletEntity
-                    || projectile instanceof FireballEntity
-                    || projectile instanceof WitherSkullEntity;
+            boolean specialHostileProjectile = autoenchants$isSpecialHostileProjectile(projectile);
             if (!hostileOwner && !specialHostileProjectile) {
                 continue;
             }
@@ -306,6 +307,13 @@ public final class ReactionArmorHandler {
                 || projectile instanceof EnderPearlEntity;
     }
 
+    private static boolean autoenchants$isSpecialHostileProjectile(ProjectileEntity projectile) {
+        return projectile instanceof ShulkerBulletEntity
+                || projectile instanceof FireballEntity
+                || projectile instanceof WitherSkullEntity
+                || projectile instanceof DragonFireballEntity;
+    }
+
     private static boolean autoenchants$isIgnoredTriggerSource(DamageSource source) {
         Entity direct = source.getSource();
         return direct instanceof PotionEntity
@@ -319,6 +327,9 @@ public final class ReactionArmorHandler {
     }
 
     private static boolean isThreatToVictim(LivingEntity attacker, LivingEntity victim) {
+        if (attacker instanceof EnderDragonEntity || attacker instanceof WitherEntity) {
+            return true;
+        }
         if (attacker instanceof HostileEntity) {
             return true;
         }
@@ -402,6 +413,9 @@ public final class ReactionArmorHandler {
         }
         if (projectile instanceof FireballEntity) {
             return new ItemStack(Items.FIRE_CHARGE);
+        }
+        if (projectile instanceof DragonFireballEntity) {
+            return new ItemStack(Items.DRAGON_BREATH);
         }
         return new ItemStack(Items.ARROW);
     }

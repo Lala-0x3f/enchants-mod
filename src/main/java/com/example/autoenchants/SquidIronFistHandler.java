@@ -187,14 +187,14 @@ public final class SquidIronFistHandler {
             if (isIgnoredProjectile(projectile)) {
                 return false;
             }
+            if (isSpecialHostileProjectile(projectile)) {
+                return true;
+            }
             Entity owner = projectile.getOwner();
             if (owner instanceof LivingEntity livingOwner) {
                 return isThreatToVictim(livingOwner, player);
             }
-            return projectile instanceof ShulkerBulletEntity
-                    || projectile instanceof FireballEntity
-                    || projectile instanceof WitherSkullEntity
-                    || projectile instanceof DragonFireballEntity;
+            return false;
         }
         if (entity instanceof FireworkRocketEntity firework) {
             Entity owner = firework.getOwner();
@@ -368,6 +368,9 @@ public final class SquidIronFistHandler {
     }
 
     private static boolean isThreatToVictim(LivingEntity attacker, LivingEntity victim) {
+        if (attacker instanceof EnderDragonEntity || attacker instanceof WitherEntity) {
+            return true;
+        }
         if (attacker instanceof HostileEntity) {
             return true;
         }
@@ -375,6 +378,13 @@ public final class SquidIronFistHandler {
             return true;
         }
         return false;
+    }
+
+    private static boolean isSpecialHostileProjectile(ProjectileEntity projectile) {
+        return projectile instanceof ShulkerBulletEntity
+                || projectile instanceof FireballEntity
+                || projectile instanceof WitherSkullEntity
+                || projectile instanceof DragonFireballEntity;
     }
 
     private static boolean isIgnoredProjectile(ProjectileEntity projectile) {
@@ -403,6 +413,9 @@ public final class SquidIronFistHandler {
         }
         if (projectile instanceof FireballEntity) {
             return new ItemStack(Items.FIRE_CHARGE);
+        }
+        if (projectile instanceof DragonFireballEntity) {
+            return new ItemStack(Items.DRAGON_BREATH);
         }
         if (projectile instanceof WitherSkullEntity) {
             return new ItemStack(Items.WITHER_SKELETON_SKULL);
