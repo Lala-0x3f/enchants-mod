@@ -45,11 +45,19 @@ public abstract class FireworkRocketEntityMixin {
     private static final int GUIDANCE_DELAY_TICKS = 5;
     private static final int GUIDANCE_REFRESH_INTERVAL = 18;
     private static final int GUIDANCE_REACQUIRE_INTERVAL = 4;
+    private static final int GUIDANCE_LOCKED_CHECK_INTERVAL = 6;
     private static final float GUIDANCE_MAX_TURN_DEGREES = 1.0f;
+    private static final double GUIDANCE_CONE_RANGE = 42.0d;
+    private static final double GUIDANCE_CONE_HALF_ANGLE = 45.0d;
+    private static final double GUIDANCE_NO_SWITCH_DISTANCE = 8.0d;
+    private static final double GUIDANCE_SWITCH_MAX_HALF_ANGLE = 35.0d;
+    private static final double GUIDANCE_SWITCH_MIN_HALF_ANGLE = 10.0d;
 
     private int autoenchants$guidanceAge;
     private int autoenchants$nextAcquireTick;
+    private int autoenchants$nextLockedCheckTick;
     private UUID autoenchants$guidedTargetId;
+    private boolean autoenchants$targetIsLocked;
 
     @Inject(method = "onEntityHit", at = @At("HEAD"))
     private void autoenchants$blastOnEntityHit(EntityHitResult hitResult, CallbackInfo ci) {
@@ -100,7 +108,7 @@ public abstract class FireworkRocketEntityMixin {
         self.setVelocity(turnedDir.multiply(velocity.length()));
         self.velocityModified = true;
 
-        if (autoenchants$guidanceAge % GUIDANCE_REFRESH_INTERVAL == 0) {
+        if (autoenchants$guidanceAge % GUIDANCE_REFRESH_INTERVAL == 0 && autoenchants$targetIsLocked) {
             LockedOnHandler.applyLockedAndGlow(target, 20);
         }
     }
@@ -168,33 +176,125 @@ public abstract class FireworkRocketEntityMixin {
     }
 
     private LivingEntity autoenchants$getGuidedTarget(ServerWorld world, Entity self) {
-        if (autoenchants$guidedTargetId != null) {
-            Entity existing = world.getEntity(autoenchants$guidedTargetId);
-            if (existing instanceof LivingEntity living && living.isAlive() && living.hasStatusEffect(AutoEnchantsMod.LOCKED_ON)) {
-                return living;
-            }
-            autoenchants$guidedTargetId = null;
-        }
-        if (autoenchants$guidanceAge < autoenchants$nextAcquireTick) {
-            return null;
-        }
-        autoenchants$nextAcquireTick = autoenchants$guidanceAge + GUIDANCE_REACQUIRE_INTERVAL;
         Vec3d velocity = self.getVelocity();
         if (velocity.lengthSquared() < 1.0E-6d) {
             return null;
         }
-        LivingEntity found = LockedOnHandler.findBestLockedTargetInCone(
+        Vec3d forward = velocity.normalize();
+        Entity owner = ((FireworkRocketEntity) (Object) this).getOwner();
+
+        // 验证当前缓存目标是否仍然有效。
+        LivingEntity currentTarget = null;
+        if (autoenchants$guidedTargetId != null) {
+            Entity existing = world.getEntity(autoenchants$guidedTargetId);
+            if (existing instanceof LivingEntity living && living.isAlive() && !living.isSpectator()) {
+                currentTarget = living;
+            } else {
+                autoenchants$guidedTargetId = null;
+                autoenchants$targetIsLocked = false;
+            }
+        }
+
+        // 如果当前目标不是被锁定的，定期检查是否有新的被锁定目标可以切换。
+        // 当前目标已有"被锁定"效果时不搜索（已经是最优目标）。
+        if (currentTarget != null && !autoenchants$targetIsLocked
+                && autoenchants$guidanceAge >= autoenchants$nextLockedCheckTick) {
+            autoenchants$nextLockedCheckTick = autoenchants$guidanceAge + GUIDANCE_LOCKED_CHECK_INTERVAL;
+            double distToCurrentTarget = self.getPos().distanceTo(currentTarget.getPos());
+            // 距离当前目标足够近时不再搜索新目标（导弹已接近命中）。
+            if (distToCurrentTarget > GUIDANCE_NO_SWITCH_DISTANCE) {
+                // 切换角度随距离缩小：远处允许较大偏转，近处只允许小偏转。
+                double distRatio = MathHelper.clamp(
+                        (distToCurrentTarget - GUIDANCE_NO_SWITCH_DISTANCE) / (GUIDANCE_CONE_RANGE - GUIDANCE_NO_SWITCH_DISTANCE),
+                        0.0d, 1.0d
+                );
+                double switchAngle = GUIDANCE_SWITCH_MIN_HALF_ANGLE
+                        + (GUIDANCE_SWITCH_MAX_HALF_ANGLE - GUIDANCE_SWITCH_MIN_HALF_ANGLE) * distRatio;
+                LivingEntity betterLocked = autoenchants$findBestLockedInCone(world, self, forward, switchAngle, owner);
+                if (betterLocked != null) {
+                    autoenchants$guidedTargetId = betterLocked.getUuid();
+                    autoenchants$targetIsLocked = true;
+                    return betterLocked;
+                }
+            }
+        }
+
+        // 如果当前目标是被锁定的但状态效果已过期，降级为普通目标（继续追踪但不再享受锁定优先）。
+        if (currentTarget != null && autoenchants$targetIsLocked
+                && !currentTarget.hasStatusEffect(AutoEnchantsMod.LOCKED_ON)) {
+            autoenchants$targetIsLocked = false;
+        }
+
+        // 当前目标仍然有效，继续追踪。
+        if (currentTarget != null) {
+            return currentTarget;
+        }
+
+        // 无目标，按间隔重新获取。
+        if (autoenchants$guidanceAge < autoenchants$nextAcquireTick) {
+            return null;
+        }
+        autoenchants$nextAcquireTick = autoenchants$guidanceAge + GUIDANCE_REACQUIRE_INTERVAL;
+
+        // 优先搜索有"被锁定"状态的目标。
+        LivingEntity locked = autoenchants$findBestLockedInCone(world, self, forward, GUIDANCE_CONE_HALF_ANGLE, owner);
+        if (locked != null) {
+            autoenchants$guidedTargetId = locked.getUuid();
+            autoenchants$targetIsLocked = true;
+            return locked;
+        }
+
+        // 回退：在视场圆锥内搜索敌对生物。
+        LivingEntity hostile = autoenchants$findBestHostileInCone(world, self, forward, owner);
+        if (hostile != null) {
+            autoenchants$guidedTargetId = hostile.getUuid();
+            autoenchants$targetIsLocked = false;
+        }
+        return hostile;
+    }
+
+    private LivingEntity autoenchants$findBestLockedInCone(ServerWorld world, Entity self, Vec3d forward, double halfAngleDeg, Entity owner) {
+        return LockedOnHandler.findBestLockedTargetInCone(
                 world,
                 self.getPos(),
-                velocity.normalize(),
-                42.0d,
-                45.0d,
-                self
+                forward,
+                GUIDANCE_CONE_RANGE,
+                halfAngleDeg,
+                owner != null ? owner : self
         );
-        if (found != null) {
-            autoenchants$guidedTargetId = found.getUuid();
+    }
+
+    private LivingEntity autoenchants$findBestHostileInCone(ServerWorld world, Entity self, Vec3d forward, Entity owner) {
+        double cosThreshold = Math.cos(Math.toRadians(GUIDANCE_CONE_HALF_ANGLE));
+        List<HostileEntity> candidates = world.getEntitiesByClass(
+                HostileEntity.class,
+                self.getBoundingBox().expand(GUIDANCE_CONE_RANGE),
+                entity -> entity.isAlive() && !entity.isSpectator() && entity != owner
+        );
+
+        LivingEntity best = null;
+        double bestScore = -Double.MAX_VALUE;
+        Vec3d selfPos = self.getPos();
+        for (int i = 0, size = candidates.size(); i < size; i++) {
+            HostileEntity candidate = candidates.get(i);
+            Vec3d toCandidate = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(selfPos);
+            double distSq = toCandidate.lengthSquared();
+            if (distSq < 1.0E-6d || distSq > GUIDANCE_CONE_RANGE * GUIDANCE_CONE_RANGE) {
+                continue;
+            }
+            double distance = Math.sqrt(distSq);
+            Vec3d dir = toCandidate.multiply(1.0d / distance);
+            double alignment = forward.dotProduct(dir);
+            if (alignment < cosThreshold) {
+                continue;
+            }
+            double score = alignment * 1000.0d - distance;
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
         }
-        return found;
+        return best;
     }
 
     private void autoenchants$refreshGuidedTargetLockIfNeeded() {
@@ -202,7 +302,7 @@ public abstract class FireworkRocketEntityMixin {
         if (!(self.getWorld() instanceof ServerWorld serverWorld) || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
             return;
         }
-        if (autoenchants$guidedTargetId == null) {
+        if (autoenchants$guidedTargetId == null || !autoenchants$targetIsLocked) {
             return;
         }
         Entity target = serverWorld.getEntity(autoenchants$guidedTargetId);

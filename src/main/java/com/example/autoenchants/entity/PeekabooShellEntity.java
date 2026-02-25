@@ -1,6 +1,5 @@
 package com.example.autoenchants.entity;
 
-import com.example.autoenchants.AutoEnchantsMod;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.entity.Entity;
@@ -42,7 +41,7 @@ import java.util.List;
 import java.util.Optional;
 
 public class PeekabooShellEntity extends ShulkerEntity {
-    private static final double TARGET_SEARCH_RANGE = 32.0d;
+    private static final double TARGET_SEARCH_RANGE = 48.0d;
     private static final int SEARCH_INTERVAL_TICKS = 20;
     private static final int IDLE_PEEK_AMOUNT = 35;
     private static final int COMBAT_PEEK_AMOUNT = 100;
@@ -158,12 +157,10 @@ public class PeekabooShellEntity extends ShulkerEntity {
     @Override
     public boolean damage(DamageSource source, float amount) {
         Entity attacker = source.getSource();
-        if (attacker instanceof ShulkerBulletEntity bullet
-                && !bullet.getCommandTags().contains(AutoEnchantsMod.PEEKABOO_SHELL_SPARK_TAG)) {
+        if (attacker instanceof ShulkerBulletEntity) {
             return false;
         }
-        if (attacker instanceof ShulkerBulletEntity bullet
-                && bullet.getCommandTags().contains(AutoEnchantsMod.PEEKABOO_SHELL_SPARK_TAG)) {
+        if (attacker instanceof PeekabooSparkEntity) {
             this.tryTeleportWithBehaviorSound(1.0f, 1.08f);
             return false;
         }
@@ -314,17 +311,8 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
 
         for (int i = 0; i < 3; i++) {
-            Direction.Axis axis = Direction.Axis.pickRandomAxis(this.random);
-            ShulkerBulletEntity bullet = new ShulkerBulletEntity(this.getWorld(), this, target, axis);
-            bullet.addCommandTag(AutoEnchantsMod.PEEKABOO_SHELL_SPARK_TAG);
-            bullet.refreshPositionAndAngles(
-                    this.getX(),
-                    this.getBodyY(0.65d),
-                    this.getZ(),
-                    this.getYaw(),
-                    this.getPitch()
-            );
-            this.getWorld().spawnEntity(bullet);
+            PeekabooSparkEntity spark = new PeekabooSparkEntity(this.getWorld(), this, target);
+            this.getWorld().spawnEntity(spark);
         }
 
         this.playSound(SoundEvents.ENTITY_SHULKER_SHOOT, 1.0f, 1.0f + (this.random.nextFloat() - 0.5f) * 0.12f);
@@ -345,7 +333,9 @@ public class PeekabooShellEntity extends ShulkerEntity {
         List<LivingEntity> candidates = this.getWorld().getEntitiesByClass(
                 LivingEntity.class,
                 this.getBoundingBox().expand(TARGET_SEARCH_RANGE),
-                target -> this.isValidCombatTarget(target) && this.isTargetWithinEngagePathDistance(target)
+                target -> this.isValidCombatTarget(target)
+                        && this.canDirectlySee(target)
+                        && this.isTargetWithinEngagePathDistance(target)
         );
         if (candidates.isEmpty()) {
             return null;
@@ -353,6 +343,24 @@ public class PeekabooShellEntity extends ShulkerEntity {
         return candidates.stream()
                 .min(Comparator.comparingDouble(this::targetScore))
                 .orElse(null);
+    }
+
+    private boolean canDirectlySee(LivingEntity target) {
+        Vec3d eyePos = new Vec3d(this.getX(), this.getBodyY(0.65d), this.getZ());
+        Vec3d targetCenter = target.getEyePos();
+        Vec3d diff = targetCenter.subtract(eyePos);
+        double distance = diff.length();
+        if (distance < 0.5d) {
+            return true;
+        }
+        // Raycast through blocks to check line of sight
+        return this.getWorld().raycast(new net.minecraft.world.RaycastContext(
+                eyePos,
+                targetCenter,
+                net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
+                net.minecraft.world.RaycastContext.FluidHandling.NONE,
+                this
+        )).getType() == net.minecraft.util.hit.HitResult.Type.MISS;
     }
 
     private double targetScore(LivingEntity entity) {
