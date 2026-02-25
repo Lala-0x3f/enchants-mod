@@ -17,6 +17,7 @@ import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
 import com.example.autoenchants.entity.PeekabooShellEntity;
+import com.example.autoenchants.entity.PeekabooSparkEntity;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
@@ -57,7 +58,6 @@ import net.minecraft.world.World;
 
 public class AutoEnchantsMod implements ModInitializer {
     public static final String MOD_ID = "autoenchants";
-    public static final String PEEKABOO_SHELL_SPARK_TAG = "autoenchants_peekaboo_shell_spark";
 
     public static Enchantment PRECISE_SHOOTER;
     public static Enchantment AUTOMATIC;
@@ -77,6 +77,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment STRANGE_WAND;
     public static Item TARGET_POINTER;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
+    public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
@@ -92,6 +93,16 @@ public class AutoEnchantsMod implements ModInitializer {
                         .build()
         );
         FabricDefaultAttributeRegistry.register(PEEKABOO_SHELL, PeekabooShellEntity.createShulkerAttributes());
+
+        PEEKABOO_SPARK = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("peekaboo_spark"),
+                FabricEntityTypeBuilder.<PeekabooSparkEntity>create(SpawnGroup.MISC, PeekabooSparkEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.3125f, 0.3125f))
+                        .trackRangeBlocks(80)
+                        .trackedUpdateRate(2)
+                        .build()
+        );
 
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
