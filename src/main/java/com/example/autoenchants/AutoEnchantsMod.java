@@ -18,6 +18,8 @@ import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
 import com.example.autoenchants.entity.PeekabooShellEntity;
 import com.example.autoenchants.entity.PeekabooSparkEntity;
+import com.example.autoenchants.entity.SquidMissileEntity;
+import com.example.autoenchants.item.SquidMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
@@ -84,8 +86,10 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment STRANGE_WAND;
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
+    public static Item SQUID_MISSILE_ITEM;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
+    public static EntityType<SquidMissileEntity> SQUID_MISSILE;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
@@ -101,6 +105,17 @@ public class AutoEnchantsMod implements ModInitializer {
                         .build()
         );
         FabricDefaultAttributeRegistry.register(PEEKABOO_SHELL, PeekabooShellEntity.createShulkerAttributes());
+
+        SQUID_MISSILE = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("squid_missile"),
+                FabricEntityTypeBuilder.<SquidMissileEntity>create(SpawnGroup.MISC, SquidMissileEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.8f, 0.8f))
+                        .trackRangeBlocks(80)
+                        .trackedUpdateRate(2)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(SQUID_MISSILE, SquidMissileEntity.createMissileAttributes());
 
         PEEKABOO_SPARK = Registry.register(
                 Registries.ENTITY_TYPE,
@@ -220,12 +235,19 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SpawnEggItem(PEEKABOO_SHELL, 0x946794, 0x4C3A4C, new Item.Settings())
         );
 
+        SQUID_MISSILE_ITEM = Registry.register(
+                Registries.ITEM,
+                id("squid_missile"),
+                new SquidMissileItem(new Item.Settings().maxCount(16))
+        );
+
         Registry.register(Registries.ITEM_GROUP, id("main"),
                 FabricItemGroup.builder()
                         .icon(() -> new ItemStack(TARGET_POINTER))
                         .displayName(Text.translatable("itemGroup.autoenchants.main"))
                         .entries((context, entries) -> {
                             entries.add(TARGET_POINTER);
+                            entries.add(SQUID_MISSILE_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             addEnchantedBooks(entries);
                         })

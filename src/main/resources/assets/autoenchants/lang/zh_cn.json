@@ -21,5 +21,7 @@
   "entity.autoenchants.peekaboo_shell": "探头贝",
   "effect.autoenchants.locked_on": "被锁定",
   "effect.autoenchants.reaction_armor_cooldown": "反应装甲冷却",
-  "effect.autoenchants.squid_iron_fist_cooldown": "鱿鱼铁拳冷却"
+  "effect.autoenchants.squid_iron_fist_cooldown": "鱿鱼铁拳冷却",
+  "item.autoenchants.squid_missile": "鱿鱼导弹",
+  "entity.autoenchants.squid_missile": "鱿鱼导弹"
 }

@@ -21,5 +21,7 @@
   "entity.autoenchants.peekaboo_shell": "Peekaboo Shell",
   "effect.autoenchants.locked_on": "Locked On",
   "effect.autoenchants.reaction_armor_cooldown": "Reactive Armor Cooldown",
-  "effect.autoenchants.squid_iron_fist_cooldown": "Squid Iron Fist Cooldown"
+  "effect.autoenchants.squid_iron_fist_cooldown": "Squid Iron Fist Cooldown",
+  "item.autoenchants.squid_missile": "Squid Missile",
+  "entity.autoenchants.squid_missile": "Squid Missile"
 }
