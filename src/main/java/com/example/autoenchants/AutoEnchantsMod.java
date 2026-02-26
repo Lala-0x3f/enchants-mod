@@ -22,6 +22,7 @@ import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -29,6 +30,7 @@ import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.enchantment.EnchantmentLevelEntry;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.Entity;
@@ -40,12 +42,17 @@ import net.minecraft.entity.mob.EvokerFangsEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.CompassItem;
+import net.minecraft.item.EnchantedBookItem;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
+import net.minecraft.item.SpawnEggItem;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
@@ -76,6 +83,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment SQUID_IRON_FIST;
     public static Enchantment STRANGE_WAND;
     public static Item TARGET_POINTER;
+    public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
     public static StatusEffect LOCKED_ON;
@@ -206,6 +214,24 @@ public class AutoEnchantsMod implements ModInitializer {
                 new CompassItem(new Item.Settings().maxCount(1))
         );
 
+        PEEKABOO_SHELL_SPAWN_EGG = Registry.register(
+                Registries.ITEM,
+                id("peekaboo_shell_spawn_egg"),
+                new SpawnEggItem(PEEKABOO_SHELL, 0x946794, 0x4C3A4C, new Item.Settings())
+        );
+
+        Registry.register(Registries.ITEM_GROUP, id("main"),
+                FabricItemGroup.builder()
+                        .icon(() -> new ItemStack(TARGET_POINTER))
+                        .displayName(Text.translatable("itemGroup.autoenchants.main"))
+                        .entries((context, entries) -> {
+                            entries.add(TARGET_POINTER);
+                            entries.add(PEEKABOO_SHELL_SPAWN_EGG);
+                            addEnchantedBooks(entries);
+                        })
+                        .build()
+        );
+
         LOCKED_ON = Registry.register(
                 Registries.STATUS_EFFECT,
                 id("locked_on"),
@@ -274,6 +300,24 @@ public class AutoEnchantsMod implements ModInitializer {
 
     public static Identifier id(String path) {
         return new Identifier(MOD_ID, path);
+    }
+
+    private static void addEnchantedBooks(ItemGroup.Entries entries) {
+        Enchantment[] enchantments = {
+                PRECISE_SHOOTER, AUTOMATIC, TRIPLE_BURST,
+                BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER,
+                PRECISE_GUIDANCE,
+                CRITICAL_FANGS, SKY_BOMBARD,
+                THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
+                GUIDANCE, REQUIEM, STRANGE_WAND
+        };
+        for (Enchantment ench : enchantments) {
+            for (int lvl = 1; lvl <= ench.getMaxLevel(); lvl++) {
+                ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
+                EnchantedBookItem.addEnchantment(book, new EnchantmentLevelEntry(ench, lvl));
+                entries.add(book);
+            }
+        }
     }
 
     private static void autoenchants$trySpawnCriticalFangs(PlayerEntity player, LivingEntity target) {

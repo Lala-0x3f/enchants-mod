@@ -344,11 +344,11 @@ public final class LockedOnHandler {
                 continue;
             }
 
-            // 视线遮挡检测：检测到实体中心而非碰撞箱边缘
+            // 视线遮挡检测：使用 VISUAL 形状，水、草等视觉可穿透方块不会阻挡射线
             BlockHitResult blockHit = world.raycast(new RaycastContext(
                     start,
                     entityCenter,
-                    RaycastContext.ShapeType.COLLIDER,
+                    RaycastContext.ShapeType.VISUAL,
                     RaycastContext.FluidHandling.NONE,
                     player
             ));
@@ -358,7 +358,7 @@ public final class LockedOnHandler {
                 BlockHitResult blockHit2 = world.raycast(new RaycastContext(
                         start,
                         entityEye,
-                        RaycastContext.ShapeType.COLLIDER,
+                        RaycastContext.ShapeType.VISUAL,
                         RaycastContext.FluidHandling.NONE,
                         player
                 ));

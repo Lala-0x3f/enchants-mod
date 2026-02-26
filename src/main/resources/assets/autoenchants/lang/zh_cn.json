@@ -16,6 +16,8 @@
   "enchantment.autoenchants.squid_iron_fist": "鱿鱼铁拳",
   "enchantment.autoenchants.strange_wand": "奇异法杖",
   "item.autoenchants.target_pointer": "目标指针",
+  "item.autoenchants.peekaboo_shell_spawn_egg": "探头贝刷怪蛋",
+  "itemGroup.autoenchants.main": "逆天附魔",
   "entity.autoenchants.peekaboo_shell": "探头贝",
   "effect.autoenchants.locked_on": "被锁定",
   "effect.autoenchants.reaction_armor_cooldown": "反应装甲冷却",

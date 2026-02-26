@@ -16,6 +16,8 @@
   "enchantment.autoenchants.squid_iron_fist": "Squid Iron Fist",
   "enchantment.autoenchants.strange_wand": "Strange Wand",
   "item.autoenchants.target_pointer": "Target Pointer",
+  "item.autoenchants.peekaboo_shell_spawn_egg": "Peekaboo Shell Spawn Egg",
+  "itemGroup.autoenchants.main": "Auto Enchants",
   "entity.autoenchants.peekaboo_shell": "Peekaboo Shell",
   "effect.autoenchants.locked_on": "Locked On",
   "effect.autoenchants.reaction_armor_cooldown": "Reactive Armor Cooldown",
