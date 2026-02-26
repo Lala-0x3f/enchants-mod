@@ -7,7 +7,6 @@ import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.HostileEntity;
@@ -39,6 +38,8 @@ public abstract class TridentEntityMixin {
     private double autoenchants$maxY = Double.NEGATIVE_INFINITY;
     @Unique
     private UUID autoenchants$lockedTarget;
+    @Unique
+    private boolean autoenchants$bombardComplete = false;
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void autoenchants$onTick(CallbackInfo ci) {
@@ -53,8 +54,12 @@ public abstract class TridentEntityMixin {
         if (level <= 0) {
             return;
         }
-        if (autoenchants$lockedTarget != null && self.getVelocity().lengthSquared() < 0.0025d) {
+        if (autoenchants$bombardComplete) {
+            return;
+        }
+        if (self.getVelocity().lengthSquared() < 0.0025d) {
             autoenchants$lockedTarget = null;
+            autoenchants$bombardComplete = true;
             return;
         }
 
@@ -101,6 +106,7 @@ public abstract class TridentEntityMixin {
         TridentEntity self = (TridentEntity) (Object) this;
         World world = self.getWorld();
         autoenchants$lockedTarget = null;
+        autoenchants$bombardComplete = true;
         if (world.isClient()) {
             return;
         }
