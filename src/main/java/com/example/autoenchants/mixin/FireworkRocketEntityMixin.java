@@ -49,9 +49,7 @@ public abstract class FireworkRocketEntityMixin {
     private static final float GUIDANCE_MAX_TURN_DEGREES = 1.0f;
     private static final double GUIDANCE_CONE_RANGE = 42.0d;
     private static final double GUIDANCE_CONE_HALF_ANGLE = 45.0d;
-    private static final double GUIDANCE_NO_SWITCH_DISTANCE = 8.0d;
-    private static final double GUIDANCE_SWITCH_MAX_HALF_ANGLE = 35.0d;
-    private static final double GUIDANCE_SWITCH_MIN_HALF_ANGLE = 10.0d;
+    private static final double GUIDANCE_MAX_TRACK_HALF_ANGLE = 80.0d;
 
     private int autoenchants$guidanceAge;
     private int autoenchants$nextAcquireTick;
@@ -196,36 +194,41 @@ public abstract class FireworkRocketEntityMixin {
         }
 
         // 如果当前目标不是被锁定的，定期检查是否有新的被锁定目标可以切换。
+        // 被锁定目标始终拥有最高优先级，使用完整圆锥角度搜索，不受距离限制。
         // 当前目标已有"被锁定"效果时不搜索（已经是最优目标）。
         if (currentTarget != null && !autoenchants$targetIsLocked
                 && autoenchants$guidanceAge >= autoenchants$nextLockedCheckTick) {
             autoenchants$nextLockedCheckTick = autoenchants$guidanceAge + GUIDANCE_LOCKED_CHECK_INTERVAL;
-            double distToCurrentTarget = self.getPos().distanceTo(currentTarget.getPos());
-            // 距离当前目标足够近时不再搜索新目标（导弹已接近命中）。
-            if (distToCurrentTarget > GUIDANCE_NO_SWITCH_DISTANCE) {
-                // 切换角度随距离缩小：远处允许较大偏转，近处只允许小偏转。
-                double distRatio = MathHelper.clamp(
-                        (distToCurrentTarget - GUIDANCE_NO_SWITCH_DISTANCE) / (GUIDANCE_CONE_RANGE - GUIDANCE_NO_SWITCH_DISTANCE),
-                        0.0d, 1.0d
-                );
-                double switchAngle = GUIDANCE_SWITCH_MIN_HALF_ANGLE
-                        + (GUIDANCE_SWITCH_MAX_HALF_ANGLE - GUIDANCE_SWITCH_MIN_HALF_ANGLE) * distRatio;
-                LivingEntity betterLocked = autoenchants$findBestLockedInCone(world, self, forward, switchAngle, owner);
-                if (betterLocked != null) {
-                    autoenchants$guidedTargetId = betterLocked.getUuid();
-                    autoenchants$targetIsLocked = true;
-                    return betterLocked;
-                }
+            LivingEntity betterLocked = autoenchants$findBestLockedInCone(world, self, forward, GUIDANCE_CONE_HALF_ANGLE, owner);
+            if (betterLocked != null) {
+                autoenchants$guidedTargetId = betterLocked.getUuid();
+                autoenchants$targetIsLocked = true;
+                return betterLocked;
             }
         }
 
-        // 如果当前目标是被锁定的但状态效果已过期，降级为普通目标（继续追踪但不再享受锁定优先）。
+        // 如果当前目标是被锁定的但锁定已过期，降级为普通目标（继续追踪但不再享受锁定优先）。
         if (currentTarget != null && autoenchants$targetIsLocked
-                && !currentTarget.hasStatusEffect(AutoEnchantsMod.LOCKED_ON)) {
+                && !LockedOnHandler.isLockedOn(currentTarget)) {
             autoenchants$targetIsLocked = false;
         }
 
-        // 当前目标仍然有效，继续追踪。
+        // 当前目标仍然有效时，验证其是否仍在可追踪角度内。
+        // 若目标已漂移到飞行方向背后（超过最大追踪半角），放弃并重新搜索，
+        // 避免烟花因试图掉头追踪身后目标而向下螺旋。
+        if (currentTarget != null) {
+            Vec3d toTarget = currentTarget.getPos().add(0.0d, currentTarget.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+            if (toTarget.lengthSquared() > 1.0E-6d) {
+                double alignment = forward.dotProduct(toTarget.normalize());
+                double cosMaxTrack = Math.cos(Math.toRadians(GUIDANCE_MAX_TRACK_HALF_ANGLE));
+                if (alignment < cosMaxTrack) {
+                    // 目标已在飞行方向背后，丢弃缓存强制重新获取。
+                    autoenchants$guidedTargetId = null;
+                    autoenchants$targetIsLocked = false;
+                    currentTarget = null;
+                }
+            }
+        }
         if (currentTarget != null) {
             return currentTarget;
         }

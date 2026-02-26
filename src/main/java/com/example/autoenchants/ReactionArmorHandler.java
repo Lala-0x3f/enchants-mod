@@ -1,5 +1,6 @@
 package com.example.autoenchants;
 
+import com.example.autoenchants.mixin.AbstractHorseEntityAccessor;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
@@ -31,6 +32,7 @@ import net.minecraft.entity.projectile.thrown.PotionEntity;
 import net.minecraft.entity.projectile.thrown.SnowballEntity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.registry.tag.DamageTypeTags;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.MinecraftServer;
@@ -72,16 +74,38 @@ public final class ReactionArmorHandler {
         tickKnockedLava(server, now);
     }
 
-    public static void onDamaged(LivingEntity victim, net.minecraft.entity.damage.DamageSource source) {
+    public static void onDamaged(LivingEntity victim, DamageSource source) {
         if (victim.getWorld().isClient()) {
             return;
         }
-        int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.REACTION_ARMOR, victim);
+
+        int level = getReactionArmorLevelForEntity(victim);
+        LivingEntity armorWearer = victim;
+
+        // If victim has no reaction armor but is riding a horse with one, delegate to the horse
+        if (level <= 0 && victim.getVehicle() instanceof AbstractHorseEntity horse) {
+            int horseLevel = getReactionArmorLevelForEntity(horse);
+            if (horseLevel > 0) {
+                level = horseLevel;
+                armorWearer = horse;
+            }
+        }
+        // If victim is a horse with no reaction armor, check if a rider has it via the horse armor
+        // (already covered above since horse armor is on the horse entity)
+        // Also: if a horse is hit and has a rider, still trigger from the horse
+        if (level <= 0 && victim instanceof AbstractHorseEntity horse) {
+            int horseLevel = getHorseArmorReactionLevel(horse);
+            if (horseLevel > 0) {
+                level = horseLevel;
+                armorWearer = horse;
+            }
+        }
+
         if (level <= 0) {
             return;
         }
-        long now = ((ServerWorld) victim.getWorld()).getServer().getTicks();
-        if (!isOffCooldown(victim, now)) {
+        long now = ((ServerWorld) armorWearer.getWorld()).getServer().getTicks();
+        if (!isOffCooldown(armorWearer, now)) {
             return;
         }
 
@@ -93,31 +117,61 @@ public final class ReactionArmorHandler {
         if (explosive) {
             Vec3d sourcePos = source.getPosition();
             if (sourcePos != null) {
-                direction = victim.getPos().subtract(sourcePos);
+                direction = armorWearer.getPos().subtract(sourcePos);
             } else if (source.getAttacker() != null) {
-                direction = victim.getPos().subtract(source.getAttacker().getPos());
+                direction = armorWearer.getPos().subtract(source.getAttacker().getPos());
             } else {
-                direction = victim.getRotationVec(1.0f);
+                direction = armorWearer.getRotationVec(1.0f);
             }
         } else {
             Entity attackerEntity = source.getAttacker();
-            if (!(attackerEntity instanceof LivingEntity livingAttacker) || !isThreatToVictim(livingAttacker, victim)) {
+            if (!(attackerEntity instanceof LivingEntity livingAttacker) || !isThreatToVictim(livingAttacker, armorWearer)) {
                 return;
             }
             if (source.getSource() instanceof ProjectileEntity) {
                 return;
             }
-            direction = livingAttacker.getPos().subtract(victim.getPos());
+            direction = livingAttacker.getPos().subtract(armorWearer.getPos());
         }
         if (direction.lengthSquared() < 1.0E-6d) {
-            direction = victim.getRotationVec(1.0f);
+            direction = armorWearer.getRotationVec(1.0f);
         }
         if (direction.lengthSquared() < 1.0E-6d) {
             return;
         }
         direction = direction.normalize();
-        triggerDefense(victim, level, direction, MELEE_COUNTER_RANGE, true);
-        startCooldown(victim, level, now);
+        triggerDefense(armorWearer, level, direction, MELEE_COUNTER_RANGE, true);
+        startCooldown(armorWearer, level, now);
+    }
+
+    /**
+     * Gets the reaction armor enchantment level for an entity, checking both standard
+     * equipment slots and horse armor inventory.
+     */
+    private static int getReactionArmorLevelForEntity(LivingEntity entity) {
+        int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.REACTION_ARMOR, entity);
+        if (level > 0) {
+            return level;
+        }
+        if (entity instanceof AbstractHorseEntity horse) {
+            return getHorseArmorReactionLevel(horse);
+        }
+        return 0;
+    }
+
+    /**
+     * Gets the reaction armor level from a horse's armor slot (inventory index 1).
+     */
+    private static int getHorseArmorReactionLevel(AbstractHorseEntity horse) {
+        SimpleInventory inv = ((AbstractHorseEntityAccessor) horse).autoenchants$getItems();
+        if (inv.size() < 2) {
+            return 0;
+        }
+        ItemStack armorStack = inv.getStack(1);
+        if (armorStack.isEmpty()) {
+            return 0;
+        }
+        return EnchantmentHelper.getLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack);
     }
 
     private static ProjectileEntity findIncomingProjectile(LivingEntity victim, double range) {
@@ -218,11 +272,12 @@ public final class ReactionArmorHandler {
         world.spawnParticles(ParticleTypes.LANDING_HONEY, origin.x, origin.y, origin.z, 14 + level * 2, 0.55d, 0.35d, 0.55d, 0.01d);
         world.spawnParticles(ParticleTypes.LAVA, origin.x, origin.y, origin.z, 10 + level, 0.42d, 0.25d, 0.42d, 0.01d);
 
+        // Collect entities that should be excluded from splash damage (wearer + rider/mount)
         float damage = meleeMode ? (3.0f + level) : (2.5f + 0.8f * level);
         List<LivingEntity> affected = world.getEntitiesByClass(
                 LivingEntity.class,
                 wearer.getBoundingBox().expand(range),
-                target -> target.isAlive() && target != wearer
+                target -> target.isAlive() && target != wearer && !isRiderOrMount(wearer, target)
         );
         for (LivingEntity target : affected) {
             Vec3d toTarget = target.getPos().add(0.0d, target.getStandingEyeHeight() * 0.5d, 0.0d).subtract(origin);
@@ -245,6 +300,19 @@ public final class ReactionArmorHandler {
         wearer.addVelocity(-dir.x * 0.18d, 0.08d, -dir.z * 0.18d);
         wearer.velocityModified = true;
         damageReactionArmor(wearer);
+    }
+
+    /**
+     * Returns true if target is the rider of wearer or the mount of wearer.
+     */
+    private static boolean isRiderOrMount(LivingEntity wearer, LivingEntity target) {
+        if (wearer.getVehicle() == target) {
+            return true;
+        }
+        if (target.getVehicle() == wearer) {
+            return true;
+        }
+        return false;
     }
 
     private static boolean isOffCooldown(LivingEntity entity, long nowTicks) {
@@ -336,6 +404,19 @@ public final class ReactionArmorHandler {
         if (attacker instanceof MobEntity mob && mob.getTarget() == victim) {
             return true;
         }
+        // Also consider threats targeting the rider or mount of the victim
+        if (victim instanceof AbstractHorseEntity && attacker instanceof MobEntity mob) {
+            for (Entity passenger : victim.getPassengerList()) {
+                if (mob.getTarget() == passenger) {
+                    return true;
+                }
+            }
+        }
+        if (victim.getVehicle() instanceof AbstractHorseEntity horse && attacker instanceof MobEntity mob) {
+            if (mob.getTarget() == horse) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -375,6 +456,7 @@ public final class ReactionArmorHandler {
     }
 
     private static EquippedReactionArmor getReactionArmorPiece(LivingEntity entity) {
+        // Check standard equipment slots first
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack stack = entity.getEquippedStack(slot);
             if (stack.isEmpty()) {
@@ -384,6 +466,17 @@ public final class ReactionArmorHandler {
                 continue;
             }
             return new EquippedReactionArmor(slot, stack);
+        }
+        // Check horse armor inventory
+        if (entity instanceof AbstractHorseEntity horse) {
+            SimpleInventory inv = ((AbstractHorseEntityAccessor) horse).autoenchants$getItems();
+            if (inv.size() >= 2) {
+                ItemStack armorStack = inv.getStack(1);
+                if (!armorStack.isEmpty() && EnchantmentHelper.getLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack) > 0) {
+                    // Use CHEST as a proxy slot for horse armor
+                    return new EquippedReactionArmor(EquipmentSlot.CHEST, armorStack);
+                }
+            }
         }
         return null;
     }
@@ -448,7 +541,7 @@ public final class ReactionArmorHandler {
         if (!wearer.isAlive() || (wearer instanceof ServerPlayerEntity player && player.isSpectator())) {
             return;
         }
-        int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.REACTION_ARMOR, wearer);
+        int level = getReactionArmorLevelForEntity(wearer);
         if (level <= 0 || !isOffCooldown(wearer, nowTicks)) {
             return;
         }

@@ -3,6 +3,7 @@
   "package": "com.example.autoenchants.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "AbstractHorseEntityAccessor",
     "BowItemMixin",
     "CreeperEntityMixin",
     "CrossbowItemInvoker",
