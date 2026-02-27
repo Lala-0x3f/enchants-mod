@@ -12,6 +12,7 @@ import com.example.autoenchants.enchant.PrecisionGuidanceEnchantment;
 import com.example.autoenchants.enchant.ReactionArmorEnchantment;
 import com.example.autoenchants.enchant.RequiemEnchantment;
 import com.example.autoenchants.enchant.SkyBombardEnchantment;
+import com.example.autoenchants.enchant.RetroBootsEnchantment;
 import com.example.autoenchants.enchant.StrangeWandEnchantment;
 import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
@@ -22,6 +23,7 @@ import com.example.autoenchants.entity.SquidMissileEntity;
 import com.example.autoenchants.item.SquidMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
+import com.example.autoenchants.effect.RetroBootsCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
@@ -84,6 +86,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment REACTION_ARMOR;
     public static Enchantment SQUID_IRON_FIST;
     public static Enchantment STRANGE_WAND;
+    public static Enchantment RETRO_BOOTS;
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
@@ -93,6 +96,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
+    public static StatusEffect RETRO_BOOTS_COOLDOWN;
 
     @Override
     public void onInitialize() {
@@ -223,6 +227,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new StrangeWandEnchantment()
         );
 
+        RETRO_BOOTS = Registry.register(
+                Registries.ENCHANTMENT,
+                id("retro_boots"),
+                new RetroBootsEnchantment()
+        );
+
         TARGET_POINTER = Registry.register(
                 Registries.ITEM,
                 id("target_pointer"),
@@ -272,6 +282,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SquidIronFistCooldownEffect()
         );
 
+        RETRO_BOOTS_COOLDOWN = Registry.register(
+                Registries.STATUS_EFFECT,
+                id("retro_boots_cooldown"),
+                new RetroBootsCooldownEffect()
+        );
+
         ServerTickEvents.END_SERVER_TICK.register(AutoFireHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(ThermalVisionHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(RequiemHornHandler::tick);
@@ -279,6 +295,7 @@ public class AutoEnchantsMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(ReactionArmorHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(SquidIronFistHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(LockedOnHandler::tick);
+        ServerTickEvents.END_SERVER_TICK.register(RetroBootsHandler::tick);
         UseItemCallback.EVENT.register((player, world, hand) -> {
             ItemStack stack = player.getStackInHand(hand);
             if (world.isClient || !(stack.getItem() instanceof CrossbowItem)) {
@@ -331,7 +348,7 @@ public class AutoEnchantsMod implements ModInitializer {
                 PRECISE_GUIDANCE,
                 CRITICAL_FANGS, SKY_BOMBARD,
                 THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
-                GUIDANCE, REQUIEM, STRANGE_WAND
+                GUIDANCE, REQUIEM, STRANGE_WAND, RETRO_BOOTS
         };
         for (Enchantment ench : enchantments) {
             for (int lvl = 1; lvl <= ench.getMaxLevel(); lvl++) {

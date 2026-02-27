@@ -23,5 +23,7 @@
   "effect.autoenchants.reaction_armor_cooldown": "Reactive Armor Cooldown",
   "effect.autoenchants.squid_iron_fist_cooldown": "Squid Iron Fist Cooldown",
   "item.autoenchants.squid_missile": "Squid Missile",
-  "entity.autoenchants.squid_missile": "Squid Missile"
+  "entity.autoenchants.squid_missile": "Squid Missile",
+  "enchantment.autoenchants.retro_boots": "Retro Boots",
+  "effect.autoenchants.retro_boots_cooldown": "Retro Boots Cooldown"
 }
