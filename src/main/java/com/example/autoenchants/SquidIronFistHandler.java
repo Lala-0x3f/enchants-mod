@@ -503,11 +503,11 @@ public final class SquidIronFistHandler {
         Vec3d dir = direction.normalize();
         float yaw = (float) (MathHelper.atan2(dir.z, dir.x) * (180.0d / Math.PI)) - 90.0f;
         float pitch = (float) (-(MathHelper.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * (180.0d / Math.PI)));
-        // 鱿鱼模型的前向轴与常规生物不同，补偿 90 度避免“头朝上”。
+        // 鱿鱼模型的前向轴与常规生物不同，需要 -90 度补偿让头朝前
         squid.setYaw(yaw);
-        squid.setPitch(pitch + 90.0f);
+        squid.setPitch(pitch - 90.0f);
         squid.prevYaw = yaw;
-        squid.prevPitch = pitch + 90.0f;
+        squid.prevPitch = pitch - 90.0f;
     }
 
     private static void applySquidScale(GlowSquidEntity squid, double scale) {
