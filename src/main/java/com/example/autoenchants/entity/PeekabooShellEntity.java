@@ -83,6 +83,13 @@ public class PeekabooShellEntity extends ShulkerEntity {
     @Override
     protected void initGoals() {
         super.initGoals();
+        
+        // Remove default shulker shooting goal - we handle shooting in mobTick()
+        this.goalSelector.clear(goal -> {
+            String className = goal.getClass().getSimpleName();
+            return className.contains("ShootBullet") || className.contains("Shoot");
+        });
+        
         this.targetSelector.add(1, new ActiveTargetGoal<>(this, RaiderEntity.class, true));
         this.targetSelector.add(2, new ActiveTargetGoal<>(this, CreeperEntity.class, true));
         this.targetSelector.add(3, new ActiveTargetGoal<>(this, HostileEntity.class, true, target -> !(target instanceof ShulkerEntity)));
@@ -310,9 +317,10 @@ public class PeekabooShellEntity extends ShulkerEntity {
             return;
         }
 
+        // Fire 3 sparks at once
         for (int i = 0; i < 3; i++) {
-            PeekabooSparkEntity spark = new PeekabooSparkEntity(this.getWorld(), this, target);
-            this.getWorld().spawnEntity(spark);
+            PeekabooSparkEntity spark = new PeekabooSparkEntity(serverWorld, this, target);
+            serverWorld.spawnEntity(spark);
         }
 
         this.playSound(SoundEvents.ENTITY_SHULKER_SHOOT, 1.0f, 1.0f + (this.random.nextFloat() - 0.5f) * 0.12f);
