@@ -236,7 +236,17 @@ public final class SquidIronFistHandler {
         squid.setSilent(true);
         squid.setInvulnerable(true);
         squid.setVelocity(launchDir.multiply(INTERCEPT_SPEED));
-        applySquidScale(squid, 0.2d);
+        
+        // 尝试应用缩放属性
+        applySquidScale(squid, 0.33d);
+        
+        // 设置为幼年鱿鱼（会自动缩小渲染）
+        squid.setBaby(true);
+        
+        // 设置自定义名称标记为拦截弹（用于客户端识别）
+        squid.setCustomName(net.minecraft.text.Text.literal("SquidInterceptor"));
+        squid.setCustomNameVisible(false);
+        
         orientSquidTowardsDirection(squid, launchDir);
         world.spawnEntity(squid);
 
@@ -258,10 +268,20 @@ public final class SquidIronFistHandler {
             UUID squidId = entry.getKey();
             InterceptorState state = entry.getValue();
             ServerWorld world = server.getWorld(state.worldKey());
-            if (world == null || nowTicks > state.expireTick()) {
+            if (world == null) {
                 return true;
             }
+            
             Entity squidEntity = world.getEntity(squidId);
+            
+            // 超时检测 - 清理鱿鱼实体
+            if (nowTicks > state.expireTick()) {
+                if (squidEntity != null) {
+                    squidEntity.discard();
+                }
+                return true;
+            }
+            
             Entity target = world.getEntity(state.targetId());
             Entity ownerEntity = world.getEntity(state.ownerId());
             if (!(squidEntity instanceof GlowSquidEntity squid) || target == null || !target.isAlive()) {
@@ -271,12 +291,19 @@ public final class SquidIronFistHandler {
                 return true;
             }
 
+            // 检测鱿鱼是否卡在方块中（包括栅栏等非完整方块）
+            if (isSquidStuckInBlock(world, squid)) {
+                squid.discard();
+                return true;
+            }
+
             Vec3d toTarget = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(squid.getPos());
             if (toTarget.lengthSquared() < INTERCEPT_DISTANCE * INTERCEPT_DISTANCE) {
                 explodeOnIntercept(world, squid, target, ownerEntity, state.level());
                 squid.discard();
                 return true;
             }
+            
             Vec3d direction = toTarget.normalize();
             squid.setVelocity(direction.multiply(INTERCEPT_SPEED));
             orientSquidTowardsDirection(squid, direction);
@@ -536,5 +563,11 @@ public final class SquidIronFistHandler {
             SQUID_SCALE_ATTRIBUTE = null;
         }
         return SQUID_SCALE_ATTRIBUTE;
+    }
+
+    private static boolean isSquidStuckInBlock(ServerWorld world, GlowSquidEntity squid) {
+        // 检查鱿鱼的碰撞箱是否与方块碰撞
+        Box boundingBox = squid.getBoundingBox();
+        return world.getBlockCollisions(squid, boundingBox).iterator().hasNext();
     }
 }
