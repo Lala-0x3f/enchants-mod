@@ -55,7 +55,6 @@ public class SquidMissileEntity extends LivingEntity {
     private static final double DIVE_ACCELERATION = 0.08d;
     private static final float MAX_TURN_DEGREES = 4.0f;
     private static final double SEARCH_RANGE = 48.0d;
-    private static final int RELAY_UPDATE_INTERVAL = 20;
     private static final double LAUNCH_HEIGHT_OFFSET = 32.0d;
     private static final double PROXIMITY_FUSE_RANGE = 3.0d;
     private static final int NO_TARGET_BALLISTIC_TICKS = 50;
@@ -243,9 +242,13 @@ public class SquidMissileEntity extends LivingEntity {
         if (target != null) {
             // We have a locked target - fly toward relay/target
             if (!relayReached) {
-                if (relayPoint.equals(Vec3d.ZERO) || ticksInPhase % RELAY_UPDATE_INTERVAL == 0) {
+                if (relayPoint.equals(Vec3d.ZERO)) {
+                    // Relay = horizontal midpoint between missile (guidance start) and target, at apex height.
+                    // Computed once — the midpoint defines the trajectory's apex in XZ.
+                    double midX = (getX() + target.getX()) / 2.0d;
+                    double midZ = (getZ() + target.getZ()) / 2.0d;
                     double apexY = Math.max(launchY + LAUNCH_HEIGHT_OFFSET, target.getY());
-                    relayPoint = new Vec3d(target.getX(), apexY, target.getZ());
+                    relayPoint = new Vec3d(midX, apexY, midZ);
                 }
 
                 Vec3d toRelay = relayPoint.subtract(getPos());
@@ -734,10 +737,23 @@ public class SquidMissileEntity extends LivingEntity {
         if (angle <= maxAngleRad || angle < 1.0E-6d) {
             return nTo;
         }
+        double sinAngle = Math.sin(angle);
+        if (sinAngle < 1.0E-6d) {
+            // Nearly opposite vectors — pick a perpendicular axis via cross product fallback
+            Vec3d ref = Math.abs(nFrom.y) < 0.9d ? new Vec3d(0, 1, 0) : new Vec3d(1, 0, 0);
+            Vec3d axis = nFrom.crossProduct(ref).normalize();
+            // Rodrigues' rotation: rotate nFrom by maxAngleRad around axis
+            double cos = Math.cos(maxAngleRad);
+            double sin = Math.sin(maxAngleRad);
+            return nFrom.multiply(cos)
+                    .add(axis.crossProduct(nFrom).multiply(sin))
+                    .add(axis.multiply(axis.dotProduct(nFrom) * (1.0d - cos)));
+        }
+        // Spherical linear interpolation (slerp) — constant angular velocity
         double t = maxAngleRad / angle;
-        Vec3d mixed = nFrom.multiply(1.0d - t).add(nTo.multiply(t));
-        if (mixed.lengthSquared() < 1.0E-8d) return nTo;
-        return mixed.normalize();
+        double coeffFrom = Math.sin((1.0d - t) * angle) / sinAngle;
+        double coeffTo = Math.sin(t * angle) / sinAngle;
+        return nFrom.multiply(coeffFrom).add(nTo.multiply(coeffTo));
     }
 
     // ==================== DAMAGE & IMMUNITY ====================
