@@ -43,9 +43,9 @@ public class SquidMissileEntityRenderer extends LivingEntityRenderer<SquidMissil
         // Scale down slightly
         matrices.scale(0.7f, 0.7f, 0.7f);
 
-        matrices.pop();
-
         super.render(entity, yaw, tickDelta, matrices, vertexConsumers, light);
+        
+        matrices.pop();
     }
 
     @Override

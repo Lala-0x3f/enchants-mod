@@ -99,6 +99,23 @@ public class SquidMissileEntity extends LivingEntity {
     public SquidMissileEntity(EntityType<? extends SquidMissileEntity> entityType, World world) {
         super(entityType, world);
         this.noClip = false;
+        // Set compact bounding box for missile (width x height)
+        this.setBoundingBox(this.getDimensions(this.getPose()).getBoxAt(this.getPos()));
+    }
+
+    @Override
+    public void calculateDimensions() {
+        double x = this.getX();
+        double y = this.getY();
+        double z = this.getZ();
+        super.calculateDimensions();
+        this.setPosition(x, y, z);
+    }
+
+    @Override
+    public net.minecraft.entity.EntityDimensions getDimensions(net.minecraft.entity.EntityPose pose) {
+        // Compact missile dimensions: 0.5 wide x 0.8 tall
+        return net.minecraft.entity.EntityDimensions.fixed(0.5f, 0.8f);
     }
 
     public static DefaultAttributeContainer.Builder createMissileAttributes() {
@@ -199,7 +216,10 @@ public class SquidMissileEntity extends LivingEntity {
             transitionTo(Phase.GUIDANCE);
         }
 
-        checkCollisionAndExplode();
+        // Only check collision after initial acceleration to avoid detecting ground
+        if (ticksInPhase > 3) {
+            checkCollisionAndExplode();
+        }
     }
 
     private void spawnAscentParticles() {
@@ -311,11 +331,11 @@ public class SquidMissileEntity extends LivingEntity {
     private void acqScan(ServerWorld sw) {
         Entity owner = getOwnerEntity();
 
-        // Priority 1: Locked-on targets
+        // Priority 1: Locked-on targets (skip LOS check - player already confirmed visibility)
         LivingEntity locked = LockedOnHandler.findNearestLockedTarget(sw, getPos(), SEARCH_RANGE);
         if (locked != null && !isExcluded(locked)) {
-            candidateUuid = locked.getUuid();
-            acqStep = AcqStep.CALC_APEX;
+            // Directly lock on - no need for LOS check since player marked it
+            lockOnCandidate(locked);
             return;
         }
 
@@ -392,20 +412,20 @@ public class SquidMissileEntity extends LivingEntity {
         ));
 
         if (hitResult.getType() == HitResult.Type.MISS) {
-            // Nothing hit at all - reject candidate
-            resetAcquisition();
-            return;
-        }
-
-        // Check if the ray reached close to the target
-        double hitDistToTarget = hitResult.getPos().distanceTo(targetCenter);
-        if (hitDistToTarget < 2.0d) {
-            // Line of sight clear from apex to target - lock on
+            // No blocks hit - line of sight is clear, lock on
             lockOnCandidate(candidate);
             return;
         }
 
-        // Hit a solid block - store blocker position for proximity check
+        // Check if the ray reached close to the target (hit entity or near target)
+        double hitDistToTarget = hitResult.getPos().distanceTo(targetCenter);
+        if (hitDistToTarget < 2.0d) {
+            // Ray hit very close to target - consider line of sight clear
+            lockOnCandidate(candidate);
+            return;
+        }
+
+        // Hit a solid block far from target - store blocker position for proximity check
         blockerPos = hitResult.getBlockPos();
         acqStep = AcqStep.PROX_CHECK;
     }
@@ -536,15 +556,18 @@ public class SquidMissileEntity extends LivingEntity {
         if (entity instanceof EndermanEntity) return true;
         // Skip below-proximity check for current tracked target
         if (targetUuid != null && entity.getUuid().equals(targetUuid)) return false;
-        // When missile is flying flat or descending, don't exclude targets below
-        Vec3d vel = getVelocity();
-        if (vel.y <= 0.0d) return false;
-        // During ascent: exclude targets too close below (manhattan < 16)
-        if (entity.getY() < getY()) {
-            double manhattan = Math.abs(entity.getX() - getX())
-                    + Math.abs(entity.getY() - getY())
-                    + Math.abs(entity.getZ() - getZ());
-            if (manhattan < 16.0d) return true;
+        
+        // Only exclude nearby targets below during ASCENDING phase
+        // Once in GUIDANCE phase, can lock any valid target
+        if (phase == Phase.ASCENDING) {
+            Vec3d vel = getVelocity();
+            if (vel.y > 0.0d && entity.getY() < getY()) {
+                // Exclude targets too close below (manhattan < 12) during ascent
+                double manhattan = Math.abs(entity.getX() - getX())
+                        + Math.abs(entity.getY() - getY())
+                        + Math.abs(entity.getZ() - getZ());
+                if (manhattan < 12.0d) return true;
+            }
         }
         return false;
     }

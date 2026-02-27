@@ -16,7 +16,9 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.EntityHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -170,14 +172,37 @@ public abstract class TridentEntityMixin {
     }
 
     @Unique
+    private boolean autoenchants$hasLineOfSight(TridentEntity self, LivingEntity target) {
+        World world = self.getWorld();
+        Vec3d start = self.getPos();
+        Vec3d end = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        
+        HitResult hitResult = world.raycast(new RaycastContext(
+                start,
+                end,
+                RaycastContext.ShapeType.COLLIDER,
+                RaycastContext.FluidHandling.NONE,
+                self
+        ));
+        
+        return hitResult.getType() == HitResult.Type.MISS;
+    }
+
+    @Unique
     private LivingEntity autoenchants$getOrAcquireTarget(TridentEntity self, int level) {
         World world = self.getWorld();
         if (autoenchants$lockedTarget != null) {
             Entity existing = ((ServerWorld) world).getEntity(autoenchants$lockedTarget);
             if (existing instanceof LivingEntity living && living.isAlive()) {
-                return living;
+                // 检查视线，如果失去视线则重新选择目标
+                if (autoenchants$hasLineOfSight(self, living)) {
+                    return living;
+                }
+                // 失去视线，清除锁定
+                autoenchants$lockedTarget = null;
+            } else {
+                autoenchants$lockedTarget = null;
             }
-            autoenchants$lockedTarget = null;
         }
 
         Vec3d forward = self.getVelocity();
@@ -195,7 +220,8 @@ public abstract class TridentEntityMixin {
                     50.0d,
                     self.getOwner()
             );
-            if (lockedTarget != null) {
+            // 检查视线
+            if (lockedTarget != null && autoenchants$hasLineOfSight(self, lockedTarget)) {
                 autoenchants$lockedTarget = lockedTarget.getUuid();
                 return lockedTarget;
             }
@@ -218,6 +244,10 @@ public abstract class TridentEntityMixin {
             Vec3d dir = to.normalize();
             double alignment = forward.dotProduct(dir);
             if (alignment < 0.45d) {
+                continue;
+            }
+            // 检查视线，只考虑可见的目标
+            if (!autoenchants$hasLineOfSight(self, candidate)) {
                 continue;
             }
             double distancePenalty = to.length();

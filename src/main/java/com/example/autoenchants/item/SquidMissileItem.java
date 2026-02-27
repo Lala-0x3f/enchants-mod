@@ -31,7 +31,8 @@ public class SquidMissileItem extends Item {
         BlockPos spawnPos = pos.offset(side);
 
         SquidMissileEntity missile = new SquidMissileEntity(AutoEnchantsMod.SQUID_MISSILE, world);
-        missile.setPosition(spawnPos.getX() + 0.5d, spawnPos.getY(), spawnPos.getZ() + 0.5d);
+        // Position missile properly on the ground (Y + 0.01 to avoid clipping into block)
+        missile.setPosition(spawnPos.getX() + 0.5d, spawnPos.getY() + 0.01d, spawnPos.getZ() + 0.5d);
         missile.setOwner(player);
         world.spawnEntity(missile);
 
