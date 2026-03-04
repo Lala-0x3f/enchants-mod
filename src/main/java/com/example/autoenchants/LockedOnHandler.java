@@ -102,6 +102,26 @@ public final class LockedOnHandler {
         return best;
     }
 
+    public static List<LivingEntity> findAllLockedTargets(ServerWorld world, Vec3d origin, double range) {
+        double maxDistanceSq = range * range;
+        List<LivingEntity> targets = new java.util.ArrayList<>();
+        for (Map.Entry<UUID, LockedState> entry : LOCKED_STATES.entrySet()) {
+            LockedState state = entry.getValue();
+            if (state.worldKey() != world.getRegistryKey()) {
+                continue;
+            }
+            Entity entity = world.getEntity(entry.getKey());
+            if (!(entity instanceof LivingEntity candidate) || !candidate.isAlive()) {
+                continue;
+            }
+            double distanceSq = candidate.getPos().squaredDistanceTo(origin);
+            if (distanceSq <= maxDistanceSq) {
+                targets.add(candidate);
+            }
+        }
+        return targets;
+    }
+
     public static LivingEntity findBestLockedTargetInCone(ServerWorld world, Vec3d origin, Vec3d forward, double range, double halfAngleDegrees, Entity excluded) {
         double cosThreshold = Math.cos(Math.toRadians(halfAngleDegrees));
         LivingEntity best = null;

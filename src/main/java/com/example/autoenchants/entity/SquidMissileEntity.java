@@ -334,15 +334,29 @@ public class SquidMissileEntity extends LivingEntity {
     private void acqScan(ServerWorld sw) {
         Entity owner = getOwnerEntity();
 
-        // Priority 1: Locked-on targets (skip LOS check - player already confirmed visibility)
-        LivingEntity locked = LockedOnHandler.findNearestLockedTarget(sw, getPos(), SEARCH_RANGE);
-        if (locked != null && !isExcluded(locked)) {
-            // Directly lock on - no need for LOS check since player marked it
-            lockOnCandidate(locked);
-            return;
+        // Priority 1: Locked-on targets - prefer distant ones
+        List<LivingEntity> lockedTargets = LockedOnHandler.findAllLockedTargets(sw, getPos(), SEARCH_RANGE);
+        if (!lockedTargets.isEmpty()) {
+            // Filter out excluded targets and find the farthest valid locked target
+            LivingEntity bestLocked = null;
+            double maxDist = 0.0d;
+            for (LivingEntity locked : lockedTargets) {
+                if (!isExcluded(locked)) {
+                    double dist = locked.getPos().distanceTo(getPos());
+                    if (dist > maxDist) {
+                        maxDist = dist;
+                        bestLocked = locked;
+                    }
+                }
+            }
+            if (bestLocked != null) {
+                // Directly lock on - no need for LOS check since player marked it
+                lockOnCandidate(bestLocked);
+                return;
+            }
         }
 
-        // Priority 2 & 3: Hostile mobs scored by size/priority
+        // Priority 2 & 3: Hostile mobs scored by size/priority and distance
         List<LivingEntity> candidates = sw.getEntitiesByClass(
                 LivingEntity.class,
                 getBoundingBox().expand(SEARCH_RANGE),
@@ -364,12 +378,21 @@ public class SquidMissileEntity extends LivingEntity {
 
             double score = 0.0d;
             double volume = candidate.getWidth() * candidate.getWidth() * candidate.getHeight();
+            
+            // Base score from target priority and size
             if (isHighPriorityTarget(candidate)) {
                 score += 10000.0d + volume * 100.0d;
             } else {
                 score += volume * 50.0d;
             }
-            score -= dist * 2.0d;
+            
+            // Distance bonus: prefer medium to far range targets
+            // Targets at 30-48 blocks get bonus, closer targets get penalty
+            if (dist > 30.0d) {
+                score += dist * 8.0d; // Strong bonus for distant targets
+            } else {
+                score -= (30.0d - dist) * 5.0d; // Strong penalty for close targets
+            }
 
             if (score > bestScore) {
                 bestScore = score;
@@ -560,18 +583,23 @@ public class SquidMissileEntity extends LivingEntity {
         // Skip below-proximity check for current tracked target
         if (targetUuid != null && entity.getUuid().equals(targetUuid)) return false;
         
-        // Only exclude nearby targets below during ASCENDING phase
-        // Once in GUIDANCE phase, can lock any valid target
+        // Exclude targets in dead zone (too close) in all phases
+        double dist = entity.getPos().distanceTo(getPos());
+        
+        // Dead zone: exclude targets within 25 blocks
+        if (dist < 25.0d) {
+            return true;
+        }
+        
+        // Additional exclusion during ASCENDING: targets below the missile
         if (phase == Phase.ASCENDING) {
             Vec3d vel = getVelocity();
             if (vel.y > 0.0d && entity.getY() < getY()) {
-                // Exclude targets too close below (manhattan < 12) during ascent
-                double manhattan = Math.abs(entity.getX() - getX())
-                        + Math.abs(entity.getY() - getY())
-                        + Math.abs(entity.getZ() - getZ());
-                if (manhattan < 12.0d) return true;
+                // Exclude targets below during ascent if within 35 blocks
+                if (dist < 35.0d) return true;
             }
         }
+        
         return false;
     }
 
