@@ -38,6 +38,7 @@ public abstract class FireworkRocketEntityMixin {
     private static final String FIREWORK_SHULKER_TAG_PREFIX = "autoenchants_firework_shulker_lv_";
     private static final String FIREWORK_GOLEM_TAG = "autoenchants_firework_golem";
     private static final String FIREWORK_CREEPER_TAG = "autoenchants_firework_creeper";
+    private static final String FIREWORK_VEX_TAG_PREFIX = "autoenchants_firework_vex_lv_";
     private static final String PRECISE_GUIDANCE_TAG = "autoenchants_precise_guidance";
     private static final String SHULKER_BULLET_FX_TAG = "autoenchants_firework_shulker_bullet_fx";
     private static final String BLAST_LAUNCHED_TNT_TAG = "autoenchants_blast_launched_tnt";
@@ -131,11 +132,13 @@ public abstract class FireworkRocketEntityMixin {
         }
         autoenchants$spawnShulkerBulletsIfTagged();
         autoenchants$spawnGolemIfTagged();
+        autoenchants$spawnVexesIfTagged();
         self.getCommandTags().removeIf(tag ->
                 tag.startsWith(BLAST_FIREWORK_TAG_PREFIX)
                         || tag.startsWith(FIREWORK_SHULKER_TAG_PREFIX)
                         || tag.equals(FIREWORK_GOLEM_TAG)
-                        || tag.equals(FIREWORK_CREEPER_TAG));
+                        || tag.equals(FIREWORK_CREEPER_TAG)
+                        || tag.startsWith(FIREWORK_VEX_TAG_PREFIX));
         self.discard();
     }
 
@@ -154,6 +157,16 @@ public abstract class FireworkRocketEntityMixin {
         int shulkerLevel = autoenchants$findTagLevel(self, FIREWORK_SHULKER_TAG_PREFIX);
         if (shulkerLevel > 0) {
             autoenchants$spawnShulkerBulletsIfTagged();
+            autoenchants$spawnGolemIfTagged();
+            autoenchants$spawnCreeperIfTagged();
+            autoenchants$spawnVexesIfTagged();
+            self.discard();
+            return;
+        }
+
+        int vexLevel = autoenchants$findTagLevel(self, FIREWORK_VEX_TAG_PREFIX);
+        if (vexLevel > 0) {
+            autoenchants$spawnVexesIfTagged();
             autoenchants$spawnGolemIfTagged();
             autoenchants$spawnCreeperIfTagged();
             self.discard();
@@ -391,6 +404,63 @@ public abstract class FireworkRocketEntityMixin {
         self.getWorld().spawnEntity(creeper);
         autoenchants$spawnCreeperParticles(self.getWorld(), creeper.getX(), creeper.getY(), creeper.getZ(), charged);
         self.removeCommandTag(FIREWORK_CREEPER_TAG);
+    }
+
+    private void autoenchants$spawnVexesIfTagged() {
+        Entity self = (Entity) (Object) this;
+        if (self.getWorld().isClient()) {
+            return;
+        }
+
+        int vexLevel = autoenchants$findTagLevel(self, FIREWORK_VEX_TAG_PREFIX);
+        if (vexLevel <= 0) {
+            return;
+        }
+
+        Entity ownerEntity = ((FireworkRocketEntity) (Object) this).getOwner();
+        if (!(ownerEntity instanceof LivingEntity owner)) {
+            return;
+        }
+
+        World world = self.getWorld();
+        int vexCount = vexLevel;
+        
+        autoenchants$spawnVexParticles(world, self.getX(), self.getY(), self.getZ(), vexCount);
+        
+        for (int i = 0; i < vexCount; i++) {
+            net.minecraft.entity.mob.VexEntity vex = EntityType.VEX.create(world);
+            if (vex == null) {
+                continue;
+            }
+            
+            double angle = (2.0d * Math.PI * i) / vexCount;
+            double offsetX = Math.cos(angle) * 1.5d;
+            double offsetZ = Math.sin(angle) * 1.5d;
+            
+            vex.refreshPositionAndAngles(
+                self.getX() + offsetX,
+                self.getY() + 0.5d,
+                self.getZ() + offsetZ,
+                world.random.nextFloat() * 360.0f,
+                0.0f
+            );
+            
+            int lifeTicks = (15 + vexLevel * 5) * 20;
+            vex.setLifeTicks(lifeTicks);
+            
+            world.spawnEntity(vex);
+        }
+
+        self.getCommandTags().removeIf(tag -> tag.startsWith(FIREWORK_VEX_TAG_PREFIX));
+    }
+
+    private void autoenchants$spawnVexParticles(World world, double x, double y, double z, int vexCount) {
+        if (!(world instanceof ServerWorld serverWorld)) {
+            return;
+        }
+        int amount = Math.min(50, 15 + vexCount * 5);
+        serverWorld.spawnParticles(ParticleTypes.WITCH, x, y + 0.3d, z, amount, 0.5d, 0.4d, 0.5d, 0.04d);
+        serverWorld.spawnParticles(ParticleTypes.ENCHANT, x, y + 0.2d, z, amount / 2, 0.4d, 0.3d, 0.4d, 0.02d);
     }
 
     private int autoenchants$triggerSympatheticDetonation(World world, Entity source, int blastLevel) {

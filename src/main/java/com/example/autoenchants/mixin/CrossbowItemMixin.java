@@ -24,6 +24,7 @@ public abstract class CrossbowItemMixin {
     private static final String FIREWORK_SHULKER_TAG_PREFIX = "autoenchants_firework_shulker_lv_";
     private static final String FIREWORK_GOLEM_TAG = "autoenchants_firework_golem";
     private static final String FIREWORK_CREEPER_TAG = "autoenchants_firework_creeper";
+    private static final String FIREWORK_VEX_TAG_PREFIX = "autoenchants_firework_vex_lv_";
     private static final String PRECISE_GUIDANCE_TAG = "autoenchants_precise_guidance";
 
     @Redirect(
@@ -88,6 +89,10 @@ public abstract class CrossbowItemMixin {
         if (projectileStack.getItem() instanceof FireworkRocketItem && creeperLevel > 0) {
             projectile.addCommandTag(FIREWORK_CREEPER_TAG);
         }
+        int vexLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow);
+        if (projectileStack.getItem() instanceof FireworkRocketItem && vexLevel > 0) {
+            projectile.addCommandTag(FIREWORK_VEX_TAG_PREFIX + vexLevel);
+        }
         int guidanceLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && guidanceLevel > 0) {
             projectile.addCommandTag(PRECISE_GUIDANCE_TAG);
@@ -113,6 +118,7 @@ public abstract class CrossbowItemMixin {
                 || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_SHULKER, crossbow) > 0
                 || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_GOLEM, crossbow) > 0
                 || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_CREEPER, crossbow) > 0
+                || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow) > 0
                 || EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow) > 0;
     }
 

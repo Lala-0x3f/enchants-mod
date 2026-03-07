@@ -6,6 +6,7 @@ import com.example.autoenchants.enchant.CriticalFangsEnchantment;
 import com.example.autoenchants.enchant.FireworkCreeperEnchantment;
 import com.example.autoenchants.enchant.FireworkGolemEnchantment;
 import com.example.autoenchants.enchant.FireworkShulkerEnchantment;
+import com.example.autoenchants.enchant.FireworkVexEnchantment;
 import com.example.autoenchants.enchant.GuidanceEnchantment;
 import com.example.autoenchants.enchant.PreciseShooterEnchantment;
 import com.example.autoenchants.enchant.PrecisionGuidanceEnchantment;
@@ -77,6 +78,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment FIREWORK_SHULKER;
     public static Enchantment FIREWORK_GOLEM;
     public static Enchantment FIREWORK_CREEPER;
+    public static Enchantment FIREWORK_VEX;
     public static Enchantment CRITICAL_FANGS;
     public static Enchantment THERMAL_HELMET;
     public static Enchantment REQUIEM;
@@ -171,6 +173,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 Registries.ENCHANTMENT,
                 id("firework_creeper"),
                 new FireworkCreeperEnchantment()
+        );
+
+        FIREWORK_VEX = Registry.register(
+                Registries.ENCHANTMENT,
+                id("firework_vex"),
+                new FireworkVexEnchantment()
         );
 
         CRITICAL_FANGS = Registry.register(
@@ -344,7 +352,7 @@ public class AutoEnchantsMod implements ModInitializer {
     private static void addEnchantedBooks(ItemGroup.Entries entries) {
         Enchantment[] enchantments = {
                 PRECISE_SHOOTER, AUTOMATIC, TRIPLE_BURST,
-                BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER,
+                BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER, FIREWORK_VEX,
                 PRECISE_GUIDANCE,
                 CRITICAL_FANGS, SKY_BOMBARD,
                 THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
