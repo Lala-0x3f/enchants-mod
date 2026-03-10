@@ -2,6 +2,7 @@ package com.example.autoenchants.mixin;
 
 import com.example.autoenchants.AutoEnchantsMod;
 import com.example.autoenchants.LockedOnHandler;
+import net.minecraft.block.Blocks;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.Entity;
@@ -17,7 +18,9 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.random.Random;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
@@ -42,6 +45,8 @@ public abstract class TridentEntityMixin {
     private UUID autoenchants$lockedTarget;
     @Unique
     private boolean autoenchants$bombardComplete = false;
+    @Unique
+    private boolean autoenchants$hasHitEntity = false;
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void autoenchants$onTick(CallbackInfo ci) {
@@ -115,58 +120,100 @@ public abstract class TridentEntityMixin {
 
         ItemStack stack = self.getItemStack();
         int level = EnchantmentHelper.getLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
-        if (level <= 0) {
-            return;
-        }
-
-        Entity ownerEntity = self.getOwner();
-        if (!(ownerEntity instanceof LivingEntity owner)) {
-            return;
-        }
-
-        double baseDamage = 4.0d + level * 2.0d;
-        boolean wetBoost = world.isRaining() || world.isThundering();
-        if (wetBoost) {
-            baseDamage *= 2.0d;
-        }
-
-        List<LivingEntity> victims = world.getEntitiesByClass(
-                LivingEntity.class,
-                self.getBoundingBox().expand(3.0d),
-                entity -> entity.isAlive() && entity != owner
-        );
-
-        for (LivingEntity victim : victims) {
-            victim.damage(owner.getDamageSources().trident(self, owner), (float) baseDamage);
-            victim.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100 + level * 20, 0, false, true, true));
-            Vec3d knockDir = victim.getPos().subtract(self.getPos());
-            if (knockDir.lengthSquared() < 1.0E-5d) {
-                knockDir = new Vec3d(0.0d, 1.0d, 0.0d);
-            } else {
-                knockDir = knockDir.normalize();
-            }
-            double knockStrength = 0.8d + 0.15d * level;
-            victim.addVelocity(knockDir.x * knockStrength, 0.35d + 0.08d * level, knockDir.z * knockStrength);
-            victim.velocityModified = true;
-            if (world instanceof ServerWorld serverWorld) {
-                serverWorld.spawnParticles(ParticleTypes.EXPLOSION, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 2, 0.22d, 0.22d, 0.22d, 0.01d);
-                serverWorld.spawnParticles(ParticleTypes.SPLASH, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 14, 0.25d, 0.25d, 0.25d, 0.01d);
-                serverWorld.spawnParticles(ParticleTypes.SNEEZE, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 10, 0.18d, 0.18d, 0.18d, 0.01d);
-            }
-        }
-        float explosionPower = 1.0f + 0.2f * level;
-        world.createExplosion(owner, self.getX(), self.getY(), self.getZ(), explosionPower, false, World.ExplosionSourceType.MOB);
-
-        if (EnchantmentHelper.getLevel(Enchantments.CHANNELING, stack) > 0 && world instanceof ServerWorld serverWorld) {
-            for (LivingEntity victim : victims) {
-                LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
-                if (lightning == null) {
-                    continue;
+        if (level > 0) {
+            Entity ownerEntity = self.getOwner();
+            if (ownerEntity instanceof LivingEntity owner) {
+                double baseDamage = 4.0d + level * 2.0d;
+                boolean wetBoost = world.isRaining() || world.isThundering();
+                if (wetBoost) {
+                    baseDamage *= 2.0d;
                 }
-                lightning.refreshPositionAfterTeleport(victim.getX(), victim.getY(), victim.getZ());
-                lightning.setChanneler(owner instanceof net.minecraft.server.network.ServerPlayerEntity sp ? sp : null);
-                world.spawnEntity(lightning);
-                victim.setOnFireFor(5);
+
+                List<LivingEntity> victims = world.getEntitiesByClass(
+                        LivingEntity.class,
+                        self.getBoundingBox().expand(3.0d),
+                        entity -> entity.isAlive() && entity != owner
+                );
+
+                for (LivingEntity victim : victims) {
+                    victim.damage(owner.getDamageSources().trident(self, owner), (float) baseDamage);
+                    victim.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100 + level * 20, 0, false, true, true));
+                    Vec3d knockDir = victim.getPos().subtract(self.getPos());
+                    if (knockDir.lengthSquared() < 1.0E-5d) {
+                        knockDir = new Vec3d(0.0d, 1.0d, 0.0d);
+                    } else {
+                        knockDir = knockDir.normalize();
+                    }
+                    double knockStrength = 0.8d + 0.15d * level;
+                    victim.addVelocity(knockDir.x * knockStrength, 0.35d + 0.08d * level, knockDir.z * knockStrength);
+                    victim.velocityModified = true;
+                    if (world instanceof ServerWorld serverWorld) {
+                        serverWorld.spawnParticles(ParticleTypes.EXPLOSION, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 2, 0.22d, 0.22d, 0.22d, 0.01d);
+                        serverWorld.spawnParticles(ParticleTypes.SPLASH, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 14, 0.25d, 0.25d, 0.25d, 0.01d);
+                        serverWorld.spawnParticles(ParticleTypes.SNEEZE, victim.getX(), victim.getBodyY(0.5d), victim.getZ(), 10, 0.18d, 0.18d, 0.18d, 0.01d);
+                    }
+                }
+                float explosionPower = 1.0f + 0.2f * level;
+                world.createExplosion(owner, self.getX(), self.getY(), self.getZ(), explosionPower, false, World.ExplosionSourceType.MOB);
+
+                if (EnchantmentHelper.getLevel(Enchantments.CHANNELING, stack) > 0 && world instanceof ServerWorld serverWorld) {
+                    for (LivingEntity victim : victims) {
+                        LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+                        if (lightning == null) {
+                            continue;
+                        }
+                        lightning.refreshPositionAfterTeleport(victim.getX(), victim.getY(), victim.getZ());
+                        lightning.setChanneler(owner instanceof net.minecraft.server.network.ServerPlayerEntity sp ? sp : null);
+                        world.spawnEntity(lightning);
+                        victim.setOnFireFor(5);
+                    }
+                }
+            }
+        }
+
+        // 爆炸三叉戟附魔效果
+        int explosiveLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.EXPLOSIVE_TRIDENT, stack);
+        if (explosiveLevel > 0 && !autoenchants$hasHitEntity) {
+            autoenchants$hasHitEntity = true;
+            Entity hitEntity = hitResult.getEntity();
+            
+            // 检查是否命中实体（不是干草堆、水或标靶）
+            if (hitEntity instanceof LivingEntity) {
+                Entity ownerEntity = self.getOwner();
+                if (ownerEntity instanceof LivingEntity owner) {
+                    // 创建爆炸，威力为 4+lv
+                    float explosionPower = 4.0f + explosiveLevel;
+                    world.createExplosion(owner, self.getX(), self.getY(), self.getZ(), explosionPower, false, World.ExplosionSourceType.MOB);
+                    
+                    if (world instanceof ServerWorld serverWorld) {
+                        // 生成大量向四周抛物线式溅射的粒子效果
+                        Random random = world.getRandom();
+                        for (int i = 0; i < 80 + explosiveLevel * 20; i++) {
+                            double angle = random.nextDouble() * Math.PI * 2;
+                            double pitch = random.nextDouble() * Math.PI * 0.5; // 0到90度
+                            double speed = 0.3 + random.nextDouble() * 0.8;
+                            
+                            double vx = Math.cos(angle) * Math.cos(pitch) * speed;
+                            double vy = Math.sin(pitch) * speed * 1.5; // 向上的速度更大
+                            double vz = Math.sin(angle) * Math.cos(pitch) * speed;
+                            
+                            serverWorld.spawnParticles(ParticleTypes.FLAME, 
+                                self.getX(), self.getY(), self.getZ(), 
+                                0, vx, vy, vz, 1.0);
+                            serverWorld.spawnParticles(ParticleTypes.LAVA, 
+                                self.getX(), self.getY(), self.getZ(), 
+                                0, vx, vy, vz, 1.0);
+                        }
+                        
+                        // 额外的爆炸粒子
+                        serverWorld.spawnParticles(ParticleTypes.EXPLOSION_EMITTER, 
+                            self.getX(), self.getY(), self.getZ(), 
+                            1, 0, 0, 0, 0);
+                    }
+                    
+                    // 点燃周围方块
+                    autoenchants$igniteNearbyBlocks(world, self.getX(), self.getY(), self.getZ(), explosiveLevel);
+                }
             }
         }
     }
@@ -262,5 +309,35 @@ public abstract class TridentEntityMixin {
             autoenchants$lockedTarget = best.getUuid();
         }
         return best;
+    }
+
+    @Unique
+    private void autoenchants$igniteNearbyBlocks(World world, double x, double y, double z, int level) {
+        Random random = world.getRandom();
+        int radius = 2 + level;
+        BlockPos center = BlockPos.ofFloored(x, y, z);
+        
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    if (dx * dx + dy * dy + dz * dz > radius * radius) {
+                        continue;
+                    }
+                    
+                    // 概率点燃，等级越高概率越大
+                    if (random.nextFloat() > 0.15f + level * 0.1f) {
+                        continue;
+                    }
+                    
+                    BlockPos pos = center.add(dx, dy, dz);
+                    BlockPos above = pos.up();
+                    
+                    // 只在空气方块上放置火
+                    if (world.getBlockState(above).isAir() && world.getBlockState(pos).isSideSolidFullSquare(world, pos, net.minecraft.util.math.Direction.UP)) {
+                        world.setBlockState(above, Blocks.FIRE.getDefaultState());
+                    }
+                }
+            }
+        }
     }
 }
