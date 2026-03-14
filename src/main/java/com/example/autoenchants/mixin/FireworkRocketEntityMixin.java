@@ -424,6 +424,19 @@ public abstract class FireworkRocketEntityMixin {
 
         World world = self.getWorld();
         int vexCount = vexLevel;
+
+        List<HostileEntity> targets = world.getEntitiesByClass(
+                HostileEntity.class,
+                self.getBoundingBox().expand(24.0d),
+                target -> target.isAlive()
+                        && !target.isSpectator()
+                        && target != owner
+                        && !(target instanceof net.minecraft.entity.mob.VexEntity)
+        );
+        if (targets.isEmpty()) {
+            return;
+        }
+        targets.sort(Comparator.comparingDouble(self::squaredDistanceTo));
         
         autoenchants$spawnVexParticles(world, self.getX(), self.getY(), self.getZ(), vexCount);
         
@@ -447,6 +460,12 @@ public abstract class FireworkRocketEntityMixin {
             
             int lifeTicks = (15 + vexLevel * 5) * 20;
             vex.setLifeTicks(lifeTicks);
+            if (ownerEntity instanceof net.minecraft.entity.mob.MobEntity ownerMob) {
+                vex.setOwner(ownerMob);
+            }
+            if (!targets.isEmpty()) {
+                vex.setTarget(targets.get(i % targets.size()));
+            }
             
             world.spawnEntity(vex);
         }
