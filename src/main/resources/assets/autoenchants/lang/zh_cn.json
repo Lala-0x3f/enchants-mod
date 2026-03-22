@@ -26,6 +26,8 @@
   "effect.autoenchants.squid_iron_fist_cooldown": "鱿鱼铁拳冷却",
   "item.autoenchants.squid_missile": "鱿鱼导弹",
   "entity.autoenchants.squid_missile": "鱿鱼导弹",
+  "item.autoenchants.super_snow_golem_spawn_egg": "超级雪傀儡刷怪蛋",
+  "entity.autoenchants.super_snow_golem": "超级雪傀儡",
   "enchantment.autoenchants.retro_boots": "反推之靴",
   "effect.autoenchants.retro_boots_cooldown": "反推之靴冷却"
 }

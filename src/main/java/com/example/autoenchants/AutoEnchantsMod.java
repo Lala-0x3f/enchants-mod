@@ -21,6 +21,8 @@ import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
 import com.example.autoenchants.entity.PeekabooShellEntity;
 import com.example.autoenchants.entity.PeekabooSparkEntity;
+import com.example.autoenchants.entity.SuperGolemSnowballEntity;
+import com.example.autoenchants.entity.SuperSnowGolemEntity;
 import com.example.autoenchants.entity.SquidMissileEntity;
 import com.example.autoenchants.item.SquidMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
@@ -45,6 +47,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.mob.EvokerFangsEntity;
+import net.minecraft.entity.passive.SnowGolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.CompassItem;
@@ -97,10 +100,13 @@ public class AutoEnchantsMod implements ModInitializer {
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
     public static EntityType<SquidMissileEntity> SQUID_MISSILE;
+    public static EntityType<SuperSnowGolemEntity> SUPER_SNOW_GOLEM;
+    public static EntityType<SuperGolemSnowballEntity> SUPER_GOLEM_SNOWBALL;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
     public static StatusEffect RETRO_BOOTS_COOLDOWN;
+    public static Item SUPER_SNOW_GOLEM_SPAWN_EGG;
 
     @Override
     public void onInitialize() {
@@ -134,6 +140,26 @@ public class AutoEnchantsMod implements ModInitializer {
                         .trackedUpdateRate(2)
                         .build()
         );
+
+        SUPER_GOLEM_SNOWBALL = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("super_golem_snowball"),
+                FabricEntityTypeBuilder.<SuperGolemSnowballEntity>create(SpawnGroup.MISC, SuperGolemSnowballEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.25f, 0.25f))
+                        .trackRangeBlocks(64)
+                        .trackedUpdateRate(10)
+                        .build()
+        );
+
+        SUPER_SNOW_GOLEM = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("super_snow_golem"),
+                FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, SuperSnowGolemEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.7f, 1.9f))
+                        .trackRangeBlocks(80)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(SUPER_SNOW_GOLEM, SnowGolemEntity.createSnowGolemAttributes());
 
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
@@ -267,6 +293,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SquidMissileItem(new Item.Settings().maxCount(16))
         );
 
+        SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
+                Registries.ITEM,
+                id("super_snow_golem_spawn_egg"),
+                new SpawnEggItem(SUPER_SNOW_GOLEM, 0xBFD7FF, 0x4F5F6E, new Item.Settings())
+        );
+
         Registry.register(Registries.ITEM_GROUP, id("main"),
                 FabricItemGroup.builder()
                         .icon(() -> new ItemStack(TARGET_POINTER))
@@ -275,6 +307,7 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(TARGET_POINTER);
                             entries.add(SQUID_MISSILE_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
+                            entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
                             addEnchantedBooks(entries);
                         })
                         .build()
