@@ -1,0 +1,22 @@
+{
+  "anvil_cost": 3,
+  "description": {
+    "translate": "enchantment.autoenchants.thermal_helmet"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 34,
+    "per_level_above_first": 10
+  },
+  "max_level": 3,
+  "min_cost": {
+    "base": 14,
+    "per_level_above_first": 10
+  },
+  "primary_items": "#minecraft:enchantable/head_armor",
+  "slots": [
+    "head"
+  ],
+  "supported_items": "#minecraft:enchantable/head_armor",
+  "weight": 2
+}

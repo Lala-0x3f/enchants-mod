@@ -1,0 +1,22 @@
+{
+  "anvil_cost": 3,
+  "description": {
+    "translate": "enchantment.autoenchants.precise_shooter"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 55,
+    "per_level_above_first": 12
+  },
+  "max_level": 3,
+  "min_cost": {
+    "base": 15,
+    "per_level_above_first": 12
+  },
+  "primary_items": "#autoenchants:enchantable/precise_shooter",
+  "slots": [
+    "mainhand"
+  ],
+  "supported_items": "#autoenchants:enchantable/precise_shooter",
+  "weight": 2
+}

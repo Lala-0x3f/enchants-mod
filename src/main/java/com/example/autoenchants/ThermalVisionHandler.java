@@ -1,6 +1,5 @@
 package com.example.autoenchants;
 
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.EndermanEntity;
@@ -39,9 +38,9 @@ public final class ThermalVisionHandler {
     public static void tick(MinecraftServer server) {
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             UUID playerId = player.getUuid();
-            ServerWorld world = player.getServerWorld();
-            ItemStack helmet = player.getInventory().getArmorStack(3);
-            int level = EnchantmentHelper.getLevel(AutoEnchantsMod.THERMAL_HELMET, helmet);
+            ServerWorld world = (ServerWorld) player.getEntityWorld();
+            ItemStack helmet = player.getEquippedStack(net.minecraft.entity.EquipmentSlot.HEAD);
+            int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.THERMAL_HELMET, helmet);
 
             if (level <= 0 || !world.isNight()) {
                 NEXT_PARTICLE_TICK.remove(playerId);

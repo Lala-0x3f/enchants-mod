@@ -33,8 +33,9 @@ import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.ColorHelper;
 import net.minecraft.world.World;
-import org.joml.Vector3f;
+import net.minecraft.world.Heightmap;
 
 import java.util.Comparator;
 import java.util.List;
@@ -92,16 +93,11 @@ public class PeekabooShellEntity extends ShulkerEntity {
         
         this.targetSelector.add(1, new ActiveTargetGoal<>(this, RaiderEntity.class, true));
         this.targetSelector.add(2, new ActiveTargetGoal<>(this, CreeperEntity.class, true));
-        this.targetSelector.add(3, new ActiveTargetGoal<>(this, HostileEntity.class, true, target -> !(target instanceof ShulkerEntity)));
     }
 
     @Override
-    protected void mobTick() {
-        super.mobTick();
-        if (this.getWorld().isClient()) {
-            return;
-        }
-
+    protected void mobTick(ServerWorld world) {
+        super.mobTick(world);
         if (this.happySpinTicks > 0) {
             this.setBodyYaw(this.getBodyYaw() + 24.0f);
             this.setHeadYaw(this.getHeadYaw() + 24.0f);
@@ -162,7 +158,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     @Override
-    public boolean damage(DamageSource source, float amount) {
+    public boolean damage(ServerWorld world, DamageSource source, float amount) {
         Entity attacker = source.getSource();
         if (attacker instanceof ShulkerBulletEntity) {
             return false;
@@ -186,7 +182,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
             }
             amount *= CLOSED_DAMAGE_FACTOR;
         }
-        boolean damaged = super.damage(source, amount);
+        boolean damaged = super.damage(world, source, amount);
         if (damaged) {
             if (this.dataTracker.get(PEEK_AMOUNT) <= 0) {
                 this.playSound(SoundEvents.ENTITY_SHULKER_HURT_CLOSED, 0.85f, 0.95f + this.random.nextFloat() * 0.1f);
@@ -200,15 +196,14 @@ public class PeekabooShellEntity extends ShulkerEntity {
     @Override
     public ActionResult interactMob(PlayerEntity player, Hand hand) {
         ItemStack stack = player.getStackInHand(hand);
-        if (stack.getItem() instanceof DyeItem dyeItem) {
-            if (!this.getWorld().isClient()) {
-                this.setVariant(Optional.of(dyeItem.getColor()));
+        if (stack.getItem() instanceof DyeItem) {
+            if (!this.getEntityWorld().isClient()) {
                 this.playSound(SoundEvents.ITEM_DYE_USE, 0.8f, 1.0f);
                 if (!player.getAbilities().creativeMode) {
                     stack.decrement(1);
                 }
             }
-            return ActionResult.success(this.getWorld().isClient());
+            return ActionResult.SUCCESS;
         }
 
         if (stack.isOf(Items.CHORUS_FRUIT)) {
@@ -216,10 +211,10 @@ public class PeekabooShellEntity extends ShulkerEntity {
                 this.playSound(SoundEvents.ENTITY_SHULKER_CLOSE, 0.7f, 1.1f);
                 return ActionResult.FAIL;
             }
-            if (!this.getWorld().isClient()) {
-                ServerWorld serverWorld = (ServerWorld) this.getWorld();
+            if (!this.getEntityWorld().isClient()) {
+                ServerWorld serverWorld = (ServerWorld) this.getEntityWorld();
                 this.heal(6.0f);
-                this.playSound(SoundEvents.ENTITY_GENERIC_EAT, 0.75f, 0.95f + this.random.nextFloat() * 0.15f);
+                this.playSound(SoundEvents.ENTITY_GENERIC_EAT.value(), 0.75f, 0.95f + this.random.nextFloat() * 0.15f);
                 serverWorld.spawnParticles(
                         ParticleTypes.HEART,
                         this.getX(),
@@ -249,7 +244,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
                     stack.decrement(1);
                 }
             }
-            return ActionResult.success(this.getWorld().isClient());
+            return ActionResult.SUCCESS;
         }
         return super.interactMob(player, hand);
     }
@@ -262,7 +257,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private void playHappyArpeggioTick() {
-        if (this.getWorld().isClient() || this.happySpinTicks % HAPPY_ARPEGGIO_INTERVAL_TICKS != 0) {
+        if (this.getEntityWorld().isClient() || this.happySpinTicks % HAPPY_ARPEGGIO_INTERVAL_TICKS != 0) {
             return;
         }
         int idx = this.happyArpeggioStep;
@@ -287,7 +282,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
                 this.happyArpeggioStep--;
             }
         }
-        if (this.getWorld() instanceof ServerWorld serverWorld) {
+        if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
             serverWorld.spawnParticles(
                     ParticleTypes.NOTE,
                     this.getX(),
@@ -313,7 +308,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private void fireSparkVolley(LivingEntity target) {
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
 
@@ -325,7 +320,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
 
         this.playSound(SoundEvents.ENTITY_SHULKER_SHOOT, 1.0f, 1.0f + (this.random.nextFloat() - 0.5f) * 0.12f);
         serverWorld.spawnParticles(
-                new DustParticleEffect(new Vector3f(0.95f, 0.85f, 0.25f), 1.0f),
+                new DustParticleEffect(ColorHelper.getArgb(255, 242, 217, 64), 1.0f),
                 this.getX(),
                 this.getBodyY(0.6d),
                 this.getZ(),
@@ -338,7 +333,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private LivingEntity findPriorityTarget() {
-        List<LivingEntity> candidates = this.getWorld().getEntitiesByClass(
+        List<LivingEntity> candidates = this.getEntityWorld().getEntitiesByClass(
                 LivingEntity.class,
                 this.getBoundingBox().expand(TARGET_SEARCH_RANGE),
                 target -> this.isValidCombatTarget(target)
@@ -362,7 +357,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
             return true;
         }
         // Raycast through blocks to check line of sight
-        return this.getWorld().raycast(new net.minecraft.world.RaycastContext(
+        return this.getEntityWorld().raycast(new net.minecraft.world.RaycastContext(
                 eyePos,
                 targetCenter,
                 net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
@@ -408,7 +403,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
         }
 
         double pathDistance = 0.0d;
-        Vec3d previous = mobTarget.getPos();
+        Vec3d previous = mobTarget.getEntityPos();
         for (int i = 0; i < path.getLength(); i++) {
             PathNode node = path.getNode(i);
             Vec3d nodePos = new Vec3d(node.x + 0.5d, node.y, node.z + 0.5d);
@@ -418,12 +413,12 @@ public class PeekabooShellEntity extends ShulkerEntity {
             }
             previous = nodePos;
         }
-        pathDistance += previous.distanceTo(this.getPos());
+        pathDistance += previous.distanceTo(this.getEntityPos());
         return pathDistance <= MAX_ENGAGE_PATH_DISTANCE;
     }
 
     private void tryNonCombatTeleportPreference() {
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
         if (serverWorld.getRegistryKey() != World.OVERWORLD) {
@@ -471,7 +466,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private boolean tryCuriousStacking() {
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return false;
         }
         if (serverWorld.getRegistryKey() != World.OVERWORLD || !serverWorld.isDay() || serverWorld.isRaining()) {
@@ -518,7 +513,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private boolean tryScatterWhenPlayerNear() {
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return false;
         }
         if (!this.isUpperShellInStack()) {
@@ -529,7 +524,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
             return false;
         }
 
-        Vec3d away = this.getPos().subtract(nearest.getPos());
+        Vec3d away = this.getEntityPos().subtract(nearest.getEntityPos());
         if (away.lengthSquared() < 1.0E-5d) {
             away = new Vec3d(this.random.nextDouble() - 0.5d, 0.0d, this.random.nextDouble() - 0.5d);
         }
@@ -551,7 +546,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private boolean isUpperShellInStack() {
-        List<PeekabooShellEntity> nearbyStack = this.getWorld().getEntitiesByClass(
+        List<PeekabooShellEntity> nearbyStack = this.getEntityWorld().getEntitiesByClass(
                 PeekabooShellEntity.class,
                 this.getBoundingBox().expand(0.35d, MAX_STACK_SIZE * 1.2d, 0.35d),
                 shell -> shell != this
@@ -584,7 +579,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
                 this.getBoundingBox().maxY + 0.32d,
                 this.getBoundingBox().maxZ - 0.08d
         );
-        List<LivingEntity> steppingEntities = this.getWorld().getEntitiesByClass(
+        List<LivingEntity> steppingEntities = this.getEntityWorld().getEntitiesByClass(
                 LivingEntity.class,
                 topBox,
                 entity -> entity != this && entity.isAlive() && !entity.isSpectator()
@@ -597,7 +592,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
         this.setBodyYaw(this.getBodyYaw() + (this.random.nextBoolean() ? 10.0f : -10.0f));
         this.playSound(SoundEvents.ENTITY_SHULKER_OPEN, 0.55f, 1.4f);
         for (LivingEntity stepping : steppingEntities) {
-            Vec3d push = stepping.getPos().subtract(this.getPos());
+            Vec3d push = stepping.getEntityPos().subtract(this.getEntityPos());
             Vec3d horizontal = new Vec3d(push.x, 0.0d, push.z);
             if (horizontal.lengthSquared() < 1.0E-4d) {
                 horizontal = new Vec3d(this.random.nextDouble() - 0.5d, 0.0d, this.random.nextDouble() - 0.5d);
@@ -644,7 +639,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
         for (int i = 0; i < 30; i++) {
             int dx = this.random.nextBetween(-6, 6);
             int dz = this.random.nextBetween(-6, 6);
-            int y = MathHelper.clamp(center.getY() + this.random.nextBetween(-3, 3), world.getBottomY() + 1, world.getTopY() - 2);
+            int y = MathHelper.clamp(center.getY() + this.random.nextBetween(-3, 3), world.getBottomY() + 1, world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, center.getX() + dx, center.getZ() + dz) - 1);
             mutable.set(center.getX() + dx, y, center.getZ() + dz);
             BlockPos groundPos = mutable.down();
             BlockState groundState = world.getBlockState(groundPos);
@@ -675,7 +670,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
     }
 
     private int countStackAt(PeekabooShellEntity base) {
-        return this.getWorld().getEntitiesByClass(
+        return this.getEntityWorld().getEntitiesByClass(
                 PeekabooShellEntity.class,
                 base.getBoundingBox().expand(0.35d, MAX_STACK_SIZE * 1.2d, 0.35d),
                 shell -> shell.isAlive() && Math.abs(shell.getX() - base.getX()) < 0.35d && Math.abs(shell.getZ() - base.getZ()) < 0.35d
@@ -684,7 +679,7 @@ public class PeekabooShellEntity extends ShulkerEntity {
 
     private double findStackTopY(PeekabooShellEntity base) {
         double top = base.getY();
-        List<PeekabooShellEntity> stacked = this.getWorld().getEntitiesByClass(
+        List<PeekabooShellEntity> stacked = this.getEntityWorld().getEntitiesByClass(
                 PeekabooShellEntity.class,
                 base.getBoundingBox().expand(0.35d, MAX_STACK_SIZE * 1.2d, 0.35d),
                 shell -> shell.isAlive() && Math.abs(shell.getX() - base.getX()) < 0.35d && Math.abs(shell.getZ() - base.getZ()) < 0.35d

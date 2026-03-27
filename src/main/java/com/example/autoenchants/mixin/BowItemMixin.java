@@ -1,7 +1,6 @@
 package com.example.autoenchants.mixin;
 
 import com.example.autoenchants.AutoEnchantsMod;
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.PersistentProjectileEntity;
@@ -34,7 +33,7 @@ public abstract class BowItemMixin {
             LivingEntity user,
             int remainingUseTicks
     ) {
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_SHOOTER, stack);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.PRECISE_SHOOTER, stack);
         float boostedSpeed = speed * AutoEnchantsMod.getPreciseShooterMultiplier(level);
         float improvedDivergence = AutoEnchantsMod.getPreciseShooterDivergence(divergence, level);
         projectile.setVelocity(shooter, pitch, yaw, roll, boostedSpeed, improvedDivergence);

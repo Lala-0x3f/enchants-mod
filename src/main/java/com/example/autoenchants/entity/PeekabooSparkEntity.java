@@ -4,6 +4,7 @@ import com.example.autoenchants.AutoEnchantsMod;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.data.DataTracker;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
@@ -15,12 +16,16 @@ import net.minecraft.particle.DustParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.storage.ReadView;
+import net.minecraft.storage.WriteView;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.ColorHelper;
+import net.minecraft.util.Uuids;
 import net.minecraft.world.World;
 import org.joml.Vector3f;
 
@@ -52,7 +57,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
         this.setPosition(owner.getX(), owner.getBodyY(0.65d), owner.getZ());
 
         if (target != null) {
-            Vec3d direction = target.getEyePos().subtract(this.getPos()).normalize().multiply(SPEED);
+            Vec3d direction = target.getEyePos().subtract(this.getEntityPos()).normalize().multiply(SPEED);
             this.setVelocity(direction);
         } else {
             this.setVelocity(Vec3d.ZERO);
@@ -60,7 +65,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
     }
 
     @Override
-    protected void initDataTracker() {
+    protected void initDataTracker(DataTracker.Builder builder) {
     }
 
     @Override
@@ -81,7 +86,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
 
         // Homing logic
         if (this.targetEntity != null) {
-            Vec3d toTarget = this.targetEntity.getEyePos().subtract(this.getPos());
+            Vec3d toTarget = this.targetEntity.getEyePos().subtract(this.getEntityPos());
             double distance = toTarget.length();
             if (distance > 0.01d) {
                 Vec3d desired = toTarget.normalize().multiply(SPEED);
@@ -103,15 +108,16 @@ public class PeekabooSparkEntity extends ProjectileEntity {
         }
 
         // Move
-        Vec3d pos = this.getPos();
+        Vec3d pos = this.getEntityPos();
         this.setPosition(pos.x + velocity.x, pos.y + velocity.y, pos.z + velocity.z);
 
         // Trail particles
-        if (this.getWorld() instanceof ServerWorld serverWorld) {
-            Vector3f color = new Vector3f(
-                    0.55f + serverWorld.random.nextFloat() * 0.35f,
-                    0.65f + serverWorld.random.nextFloat() * 0.25f,
-                    0.95f
+        if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
+            int color = ColorHelper.getArgb(
+                    255,
+                    MathHelper.floor((0.55f + serverWorld.random.nextFloat() * 0.35f) * 255.0f),
+                    MathHelper.floor((0.65f + serverWorld.random.nextFloat() * 0.25f) * 255.0f),
+                    MathHelper.floor(0.95f * 255.0f)
             );
             double px = this.getX() - velocity.x * 0.45d;
             double py = this.getY() + 0.12d - velocity.y * 0.35d;
@@ -142,7 +148,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
         super.onEntityHit(entityHitResult);
         Entity target = entityHitResult.getEntity();
 
-        if (!(this.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(this.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
 
@@ -161,7 +167,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
         }
 
         if (target instanceof LivingEntity livingTarget) {
-            livingTarget.damage(this.getDamageSources().magic(), DAMAGE);
+            livingTarget.damage(serverWorld, this.getDamageSources().magic(), DAMAGE);
             livingTarget.addStatusEffect(new StatusEffectInstance(StatusEffects.LEVITATION, 100, 1), this);
             livingTarget.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 100, 0), this);
             spawnHitEffects(serverWorld, target);
@@ -172,7 +178,7 @@ public class PeekabooSparkEntity extends ProjectileEntity {
     @Override
     protected void onBlockHit(BlockHitResult blockHitResult) {
         super.onBlockHit(blockHitResult);
-        if (this.getWorld() instanceof ServerWorld serverWorld) {
+        if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
             serverWorld.spawnParticles(
                     ParticleTypes.CRIT,
                     this.getX(), this.getY(), this.getZ(),
@@ -190,15 +196,28 @@ public class PeekabooSparkEntity extends ProjectileEntity {
     }
 
     @Override
-    protected void writeCustomDataToNbt(NbtCompound nbt) {
-        super.writeCustomDataToNbt(nbt);
-        nbt.putInt("Life", this.lifeTicks);
+    protected void writeCustomData(WriteView view) {
+        super.writeCustomData(view);
+        view.putInt("Life", this.lifeTicks);
+        if (this.targetEntity != null) {
+            view.put("Target", Uuids.INT_STREAM_CODEC, this.targetEntity.getUuid());
+        }
     }
 
     @Override
-    protected void readCustomDataFromNbt(NbtCompound nbt) {
-        super.readCustomDataFromNbt(nbt);
-        this.lifeTicks = nbt.getInt("Life");
+    protected void readCustomData(ReadView view) {
+        super.readCustomData(view);
+        this.lifeTicks = view.getInt("Life", 0);
+        this.targetEntity = null;
+        view.read("Target", Uuids.INT_STREAM_CODEC)
+                .ifPresent(uuid -> {
+                    if (this.getEntityWorld() instanceof ServerWorld serverWorld) {
+                        Entity entity = serverWorld.getEntity(uuid);
+                        if (entity instanceof LivingEntity living) {
+                            this.targetEntity = living;
+                        }
+                    }
+                });
     }
 
     @Override

@@ -1,18 +1,17 @@
 package com.example.autoenchants;
 
 import com.example.autoenchants.mixin.CrossbowItemInvoker;
-import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.ChargedProjectilesComponent;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Hand;
 import net.minecraft.world.World;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,7 +38,7 @@ public final class AutoFireHandler {
                 continue;
             }
 
-            int automaticLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.AUTOMATIC, stack);
+            int automaticLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.AUTOMATIC, stack);
             if (automaticLevel <= 0) {
                 clearAutomaticState(uuid);
                 continue;
@@ -51,7 +50,7 @@ public final class AutoFireHandler {
                 continue;
             }
 
-            World world = player.getWorld();
+            World world = player.getEntityWorld();
             double now = world.getTime();
             double interval = getIntervalTicks(automaticLevel);
             double nextTick = NEXT_FIRE_TICK.getOrDefault(uuid, now);
@@ -74,12 +73,12 @@ public final class AutoFireHandler {
         if (!(stack.getItem() instanceof CrossbowItem)) {
             return false;
         }
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.TRIPLE_BURST, stack);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.TRIPLE_BURST, stack);
         if (level <= 0 || !CrossbowItem.isCharged(stack)) {
             return false;
         }
 
-        NbtList chargedProjectiles = getChargedProjectiles(stack);
+        List<ItemStack> chargedProjectiles = getChargedProjectiles(stack);
         if (chargedProjectiles == null || chargedProjectiles.isEmpty()) {
             return false;
         }
@@ -89,7 +88,7 @@ public final class AutoFireHandler {
             return true;
         }
 
-        World world = player.getWorld();
+        World world = player.getEntityWorld();
         if (!fireBurstShot(player, stack, hand, world, chargedProjectiles)) {
             return false;
         }
@@ -133,7 +132,7 @@ public final class AutoFireHandler {
             return;
         }
 
-        World world = player.getWorld();
+        World world = player.getEntityWorld();
         double now = world.getTime();
         if (now < state.nextTick) {
             return;
@@ -145,7 +144,7 @@ public final class AutoFireHandler {
             return;
         }
 
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.TRIPLE_BURST, stack);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.TRIPLE_BURST, stack);
         if (level <= 0) {
             clearBurstState(uuid);
             return;
@@ -164,7 +163,7 @@ public final class AutoFireHandler {
         state.nextTick = now + getBurstIntervalTicks(level);
     }
 
-    private static boolean fireBurstShot(PlayerEntity player, ItemStack stack, Hand hand, World world, NbtList chargedProjectiles) {
+    private static boolean fireBurstShot(PlayerEntity player, ItemStack stack, Hand hand, World world, List<ItemStack> chargedProjectiles) {
         if (!setChargedProjectiles(stack, chargedProjectiles)) {
             return false;
         }
@@ -174,21 +173,19 @@ public final class AutoFireHandler {
         return true;
     }
 
-    private static NbtList getChargedProjectiles(ItemStack stack) {
-        NbtCompound nbt = stack.getNbt();
-        if (nbt == null || !nbt.contains("ChargedProjectiles", NbtElement.LIST_TYPE)) {
+    private static List<ItemStack> getChargedProjectiles(ItemStack stack) {
+        ChargedProjectilesComponent component = stack.get(DataComponentTypes.CHARGED_PROJECTILES);
+        if (component == null) {
             return null;
         }
-        return nbt.getList("ChargedProjectiles", NbtElement.COMPOUND_TYPE).copy();
+        return List.copyOf(component.getProjectiles());
     }
 
-    private static boolean setChargedProjectiles(ItemStack stack, NbtList chargedProjectiles) {
+    private static boolean setChargedProjectiles(ItemStack stack, List<ItemStack> chargedProjectiles) {
         if (chargedProjectiles == null || chargedProjectiles.isEmpty()) {
             return false;
         }
-        NbtCompound nbt = stack.getOrCreateNbt();
-        nbt.putBoolean("Charged", true);
-        nbt.put("ChargedProjectiles", chargedProjectiles.copy());
+        stack.set(DataComponentTypes.CHARGED_PROJECTILES, ChargedProjectilesComponent.of(chargedProjectiles));
         return true;
     }
 
@@ -217,9 +214,9 @@ public final class AutoFireHandler {
         private final Hand hand;
         private int remainingShots;
         private double nextTick;
-        private final NbtList chargedProjectiles;
+        private final List<ItemStack> chargedProjectiles;
 
-        private BurstState(Hand hand, int remainingShots, double nextTick, NbtList chargedProjectiles) {
+        private BurstState(Hand hand, int remainingShots, double nextTick, List<ItemStack> chargedProjectiles) {
             this.hand = hand;
             this.remainingShots = remainingShots;
             this.nextTick = nextTick;

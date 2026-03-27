@@ -1,11 +1,11 @@
 package com.example.autoenchants;
 
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityData;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.CaveSpiderEntity;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.GuardianEntity;
@@ -77,7 +77,7 @@ public final class StrangeWandHandler {
         }
 
         ItemStack stack = player.getStackInHand(hand);
-        if (!stack.isOf(Items.STICK) || EnchantmentHelper.getLevel(AutoEnchantsMod.STRANGE_WAND, stack) <= 0) {
+        if (!stack.isOf(Items.STICK) || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.STRANGE_WAND, stack) <= 0) {
             return ActionResult.PASS;
         }
 
@@ -122,13 +122,13 @@ public final class StrangeWandHandler {
         if (newType == null || newType == original.getType()) {
             return;
         }
-        MobEntity replacement = newType.create(world);
+        MobEntity replacement = newType.create(world, SpawnReason.CONVERSION);
         if (replacement == null) {
             return;
         }
         replacement.refreshPositionAndAngles(original.getX(), original.getY(), original.getZ(), original.getYaw(), original.getPitch());
         replacement.setHealth(Math.min(replacement.getMaxHealth(), original.getHealth()));
-        replacement.initialize(world, world.getLocalDifficulty(replacement.getBlockPos()), SpawnReason.CONVERSION, null, null);
+        replacement.initialize(world, world.getLocalDifficulty(replacement.getBlockPos()), SpawnReason.CONVERSION, (EntityData) null);
         world.spawnEntity(replacement);
         spawnEnchantParticles(world, replacement);
         original.discard();

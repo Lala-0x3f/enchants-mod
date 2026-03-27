@@ -1,11 +1,14 @@
 package com.example.autoenchants;
 
 import com.example.autoenchants.mixin.AbstractHorseEntityAccessor;
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.passive.AbstractHorseEntity;
@@ -39,6 +42,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.item.ItemStack;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ItemStackParticleEffect;
@@ -75,7 +80,7 @@ public final class ReactionArmorHandler {
     }
 
     public static void onDamaged(LivingEntity victim, DamageSource source) {
-        if (victim.getWorld().isClient()) {
+        if (victim.getEntityWorld().isClient()) {
             return;
         }
 
@@ -104,7 +109,7 @@ public final class ReactionArmorHandler {
         if (level <= 0) {
             return;
         }
-        long now = ((ServerWorld) armorWearer.getWorld()).getServer().getTicks();
+        long now = ((ServerWorld) armorWearer.getEntityWorld()).getServer().getTicks();
         if (!isOffCooldown(armorWearer, now)) {
             return;
         }
@@ -117,9 +122,9 @@ public final class ReactionArmorHandler {
         if (explosive) {
             Vec3d sourcePos = source.getPosition();
             if (sourcePos != null) {
-                direction = armorWearer.getPos().subtract(sourcePos);
+                direction = armorWearer.getEntityPos().subtract(sourcePos);
             } else if (source.getAttacker() != null) {
-                direction = armorWearer.getPos().subtract(source.getAttacker().getPos());
+                direction = armorWearer.getEntityPos().subtract(source.getAttacker().getEntityPos());
             } else {
                 direction = armorWearer.getRotationVec(1.0f);
             }
@@ -131,7 +136,7 @@ public final class ReactionArmorHandler {
             if (source.getSource() instanceof ProjectileEntity) {
                 return;
             }
-            direction = livingAttacker.getPos().subtract(armorWearer.getPos());
+            direction = livingAttacker.getEntityPos().subtract(armorWearer.getEntityPos());
         }
         if (direction.lengthSquared() < 1.0E-6d) {
             direction = armorWearer.getRotationVec(1.0f);
@@ -149,7 +154,7 @@ public final class ReactionArmorHandler {
      * equipment slots and horse armor inventory.
      */
     private static int getReactionArmorLevelForEntity(LivingEntity entity) {
-        int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.REACTION_ARMOR, entity);
+        int level = AutoEnchantsMod.getEquipmentEnchantmentLevel(AutoEnchantsMod.REACTION_ARMOR, entity);
         if (level > 0) {
             return level;
         }
@@ -171,11 +176,11 @@ public final class ReactionArmorHandler {
         if (armorStack.isEmpty()) {
             return 0;
         }
-        return EnchantmentHelper.getLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack);
+        return AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack);
     }
 
     private static ProjectileEntity findIncomingProjectile(LivingEntity victim, double range) {
-        World world = victim.getWorld();
+        World world = victim.getEntityWorld();
         Box box = victim.getBoundingBox().expand(range);
         List<ProjectileEntity> projectiles = world.getEntitiesByClass(
                 ProjectileEntity.class,
@@ -184,7 +189,7 @@ public final class ReactionArmorHandler {
         );
         ProjectileEntity best = null;
         double bestDistanceSq = Double.MAX_VALUE;
-        Vec3d victimPos = victim.getPos().add(0.0d, victim.getStandingEyeHeight() * 0.7d, 0.0d);
+        Vec3d victimPos = victim.getEntityPos().add(0.0d, victim.getStandingEyeHeight() * 0.7d, 0.0d);
         for (ProjectileEntity projectile : projectiles) {
             Entity owner = projectile.getOwner();
             boolean hostileOwner = owner instanceof LivingEntity livingOwner && isThreatToVictim(livingOwner, victim);
@@ -192,7 +197,7 @@ public final class ReactionArmorHandler {
             if (!hostileOwner && !specialHostileProjectile) {
                 continue;
             }
-            Vec3d toVictim = victimPos.subtract(projectile.getPos());
+            Vec3d toVictim = victimPos.subtract(projectile.getEntityPos());
             if (toVictim.lengthSquared() < 1.0E-6d) {
                 continue;
             }
@@ -214,7 +219,7 @@ public final class ReactionArmorHandler {
     }
 
     private static FireworkRocketEntity findIncomingFirework(LivingEntity victim, double range) {
-        World world = victim.getWorld();
+        World world = victim.getEntityWorld();
         Box box = victim.getBoundingBox().expand(range);
         List<FireworkRocketEntity> fireworks = world.getEntitiesByClass(
                 FireworkRocketEntity.class,
@@ -223,13 +228,13 @@ public final class ReactionArmorHandler {
         );
         FireworkRocketEntity best = null;
         double bestDistanceSq = Double.MAX_VALUE;
-        Vec3d victimPos = victim.getPos().add(0.0d, victim.getStandingEyeHeight() * 0.7d, 0.0d);
+        Vec3d victimPos = victim.getEntityPos().add(0.0d, victim.getStandingEyeHeight() * 0.7d, 0.0d);
         for (FireworkRocketEntity firework : fireworks) {
             Entity owner = firework.getOwner();
             if (!(owner instanceof LivingEntity livingOwner) || !isThreatToVictim(livingOwner, victim)) {
                 continue;
             }
-            Vec3d toVictim = victimPos.subtract(firework.getPos());
+            Vec3d toVictim = victimPos.subtract(firework.getEntityPos());
             if (toVictim.lengthSquared() < 1.0E-6d) {
                 continue;
             }
@@ -251,16 +256,16 @@ public final class ReactionArmorHandler {
     }
 
     private static void triggerDefense(LivingEntity wearer, int level, Vec3d sourceDirection, double range, boolean meleeMode) {
-        if (!(wearer.getWorld() instanceof ServerWorld world)) {
+        if (!(wearer.getEntityWorld() instanceof ServerWorld world)) {
             return;
         }
         Vec3d dir = sourceDirection.normalize();
-        Vec3d origin = wearer.getPos().add(0.0d, wearer.getStandingEyeHeight() * 0.7d, 0.0d);
+        Vec3d origin = wearer.getEntityPos().add(0.0d, wearer.getStandingEyeHeight() * 0.7d, 0.0d);
 
         int spitCount = 8 + level * 2;
         for (int i = 0; i < spitCount; i++) {
             Vec3d sprayDir = randomConeDirection(world, dir, CONE_HALF_ANGLE_DEGREES);
-            LlamaSpitEntity spit = EntityType.LLAMA_SPIT.create(world);
+            LlamaSpitEntity spit = EntityType.LLAMA_SPIT.create(world, SpawnReason.TRIGGERED);
             if (spit == null) {
                 continue;
             }
@@ -280,11 +285,11 @@ public final class ReactionArmorHandler {
                 target -> target.isAlive() && target != wearer && !isRiderOrMount(wearer, target)
         );
         for (LivingEntity target : affected) {
-            Vec3d toTarget = target.getPos().add(0.0d, target.getStandingEyeHeight() * 0.5d, 0.0d).subtract(origin);
+            Vec3d toTarget = target.getEntityPos().add(0.0d, target.getStandingEyeHeight() * 0.5d, 0.0d).subtract(origin);
             if (!isInCone(toTarget, dir, CONE_HALF_ANGLE_DEGREES, range)) {
                 continue;
             }
-            target.damage(wearer.getDamageSources().mobAttack(wearer), damage);
+            target.damage(world, wearer.getDamageSources().mobAttack(wearer), damage);
             Vec3d push = toTarget.normalize();
             double horizontal = 0.7d + 0.12d * level;
             target.addVelocity(push.x * horizontal, 0.22d + 0.05d * level, push.z * horizontal);
@@ -316,7 +321,8 @@ public final class ReactionArmorHandler {
     }
 
     private static boolean isOffCooldown(LivingEntity entity, long nowTicks) {
-        StatusEffectInstance cooldown = entity.getStatusEffect(AutoEnchantsMod.REACTION_ARMOR_COOLDOWN);
+        RegistryEntry<StatusEffect> cooldownEffect = getReactionArmorCooldownEntry(entity);
+        StatusEffectInstance cooldown = cooldownEffect == null ? null : entity.getStatusEffect(cooldownEffect);
         if (cooldown != null && cooldown.getDuration() > 0) {
             COOLDOWN_UNTIL.put(entity.getUuid(), nowTicks + cooldown.getDuration());
             return false;
@@ -326,14 +332,18 @@ public final class ReactionArmorHandler {
     }
 
     private static void startCooldown(LivingEntity entity, int level, long nowTicks) {
+        RegistryEntry<StatusEffect> cooldownEffect = getReactionArmorCooldownEntry(entity);
+        if (cooldownEffect == null) {
+            return;
+        }
         if (isZeroCooldownDebug(entity)) {
             COOLDOWN_UNTIL.remove(entity.getUuid());
-            entity.removeStatusEffect(AutoEnchantsMod.REACTION_ARMOR_COOLDOWN);
+            entity.removeStatusEffect(cooldownEffect);
             return;
         }
         int cooldownTicks = Math.max(40, 300 - (level - 1) * 40);
         COOLDOWN_UNTIL.put(entity.getUuid(), nowTicks + cooldownTicks);
-        entity.addStatusEffect(new StatusEffectInstance(AutoEnchantsMod.REACTION_ARMOR_COOLDOWN, cooldownTicks, 0, false, false, true));
+        entity.addStatusEffect(new StatusEffectInstance(cooldownEffect, cooldownTicks, 0, false, false, true));
     }
 
     private static boolean isInCone(Vec3d toTarget, Vec3d forward, double halfAngleDegrees, double maxDistance) {
@@ -423,19 +433,19 @@ public final class ReactionArmorHandler {
     private static void damageReactionArmor(LivingEntity wearer) {
         EquippedReactionArmor equipped = getReactionArmorPiece(wearer);
         if (equipped != null) {
-            equipped.stack.damage(1, wearer, entity -> entity.sendEquipmentBreakStatus(equipped.slot));
+            equipped.stack.damage(1, wearer, equipped.slot);
         }
     }
 
     private static Vec3d getPriorityThreatDirection(LivingEntity victim, ProjectileEntity projectile) {
         Entity owner = projectile.getOwner();
         if (owner instanceof LivingEntity) {
-            Vec3d toOwner = owner.getPos().subtract(victim.getPos());
+            Vec3d toOwner = owner.getEntityPos().subtract(victim.getEntityPos());
             if (toOwner.lengthSquared() >= 1.0E-6d) {
                 return toOwner.normalize();
             }
         }
-        Vec3d toProjectile = projectile.getPos().subtract(victim.getPos());
+        Vec3d toProjectile = projectile.getEntityPos().subtract(victim.getEntityPos());
         if (toProjectile.lengthSquared() >= 1.0E-6d) {
             return toProjectile.normalize();
         }
@@ -448,11 +458,12 @@ public final class ReactionArmorHandler {
 
     private static boolean isZeroCooldownDebug(LivingEntity entity) {
         EquippedReactionArmor equipped = getReactionArmorPiece(entity);
-        if (equipped == null || !equipped.stack.hasNbt()) {
+        if (equipped == null) {
             return false;
         }
-        NbtCompound nbt = equipped.stack.getNbt();
-        return nbt != null && nbt.getBoolean(ZERO_CD_NBT_KEY);
+        return equipped.stack.getOrDefault(DataComponentTypes.CUSTOM_DATA, net.minecraft.component.type.NbtComponent.DEFAULT)
+                .copyNbt()
+                .getBoolean(ZERO_CD_NBT_KEY, false);
     }
 
     private static EquippedReactionArmor getReactionArmorPiece(LivingEntity entity) {
@@ -462,7 +473,7 @@ public final class ReactionArmorHandler {
             if (stack.isEmpty()) {
                 continue;
             }
-            if (EnchantmentHelper.getLevel(AutoEnchantsMod.REACTION_ARMOR, stack) <= 0) {
+            if (AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.REACTION_ARMOR, stack) <= 0) {
                 continue;
             }
             return new EquippedReactionArmor(slot, stack);
@@ -472,7 +483,7 @@ public final class ReactionArmorHandler {
             SimpleInventory inv = ((AbstractHorseEntityAccessor) horse).autoenchants$getItems();
             if (inv.size() >= 2) {
                 ItemStack armorStack = inv.getStack(1);
-                if (!armorStack.isEmpty() && EnchantmentHelper.getLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack) > 0) {
+                if (!armorStack.isEmpty() && AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.REACTION_ARMOR, armorStack) > 0) {
                     // Use CHEST as a proxy slot for horse armor
                     return new EquippedReactionArmor(EquipmentSlot.CHEST, armorStack);
                 }
@@ -531,7 +542,7 @@ public final class ReactionArmorHandler {
             if (!(entity instanceof LivingEntity living) || !living.isAlive()) {
                 return true;
             }
-            ServerWorld world = (ServerWorld) living.getWorld();
+            ServerWorld world = (ServerWorld) living.getEntityWorld();
             world.spawnParticles(ParticleTypes.LAVA, living.getX(), living.getBodyY(0.5d), living.getZ(), 3, 0.22d, 0.18d, 0.22d, 0.0d);
             return false;
         });
@@ -553,7 +564,7 @@ public final class ReactionArmorHandler {
                 return;
             }
             triggerDefense(wearer, level, direction.normalize(), PROJECTILE_COUNTER_RANGE, false);
-            spawnProjectileShatterParticles((ServerWorld) wearer.getWorld(), incomingProjectile);
+            spawnProjectileShatterParticles((ServerWorld) wearer.getEntityWorld(), incomingProjectile);
             incomingProjectile.discard();
             startCooldown(wearer, level, nowTicks);
             return;
@@ -566,7 +577,7 @@ public final class ReactionArmorHandler {
                 return;
             }
             triggerDefense(wearer, level, direction.normalize(), PROJECTILE_COUNTER_RANGE, false);
-            ((ServerWorld) wearer.getWorld()).spawnParticles(
+            ((ServerWorld) wearer.getEntityWorld()).spawnParticles(
                     new ItemStackParticleEffect(ParticleTypes.ITEM, new ItemStack(Items.FIREWORK_ROCKET)),
                     incomingFirework.getX(), incomingFirework.getY(), incomingFirework.getZ(),
                     18, 0.12d, 0.12d, 0.12d, 0.02d
@@ -578,17 +589,17 @@ public final class ReactionArmorHandler {
 
     private static Vec3d getPriorityThreatDirectionForEntity(LivingEntity victim, Entity threat) {
         if (threat instanceof ProjectileEntity projectile && projectile.getOwner() instanceof LivingEntity owner) {
-            Vec3d toOwner = owner.getPos().subtract(victim.getPos());
+            Vec3d toOwner = owner.getEntityPos().subtract(victim.getEntityPos());
             if (toOwner.lengthSquared() >= 1.0E-6d) {
                 return toOwner.normalize();
             }
         } else if (threat instanceof FireworkRocketEntity firework && firework.getOwner() instanceof LivingEntity owner) {
-            Vec3d toOwner = owner.getPos().subtract(victim.getPos());
+            Vec3d toOwner = owner.getEntityPos().subtract(victim.getEntityPos());
             if (toOwner.lengthSquared() >= 1.0E-6d) {
                 return toOwner.normalize();
             }
         }
-        Vec3d toThreat = threat.getPos().subtract(victim.getPos());
+        Vec3d toThreat = threat.getEntityPos().subtract(victim.getEntityPos());
         if (toThreat.lengthSquared() >= 1.0E-6d) {
             return toThreat.normalize();
         }
@@ -597,5 +608,11 @@ public final class ReactionArmorHandler {
             return incoming.normalize();
         }
         return Vec3d.ZERO;
+    }
+
+    private static RegistryEntry<StatusEffect> getReactionArmorCooldownEntry(LivingEntity entity) {
+        return entity.getRegistryManager()
+                .getOrThrow(RegistryKeys.STATUS_EFFECT)
+                .getEntry(AutoEnchantsMod.REACTION_ARMOR_COOLDOWN);
     }
 }

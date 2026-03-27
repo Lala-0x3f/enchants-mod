@@ -1,0 +1,23 @@
+{
+  "anvil_cost": 4,
+  "description": {
+    "translate": "enchantment.autoenchants.sky_bombard"
+  },
+  "effects": {},
+  "exclusive_set": "#minecraft:exclusive_set/riptide",
+  "max_cost": {
+    "base": 44,
+    "per_level_above_first": 12
+  },
+  "max_level": 4,
+  "min_cost": {
+    "base": 20,
+    "per_level_above_first": 12
+  },
+  "primary_items": "#minecraft:enchantable/trident",
+  "slots": [
+    "mainhand"
+  ],
+  "supported_items": "#minecraft:enchantable/trident",
+  "weight": 1
+}

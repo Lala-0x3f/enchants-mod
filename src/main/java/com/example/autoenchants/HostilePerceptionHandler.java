@@ -9,6 +9,7 @@ import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
 
 import java.util.HashMap;
@@ -18,8 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class HostilePerceptionHandler {
-    private static final UUID PERCEPTION_MODIFIER_ID = UUID.fromString("6d3f4884-0a67-4f10-aec0-5e839bc0a93d");
-    private static final String PERCEPTION_MODIFIER_NAME = "autoenchants_perception_debuff";
+    private static final Identifier PERCEPTION_MODIFIER_ID = AutoEnchantsMod.id("perception_debuff");
     private static final double PROCESS_RADIUS = 96.0d;
     private static final Map<ServerWorld, Set<UUID>> MODIFIED_HOSTILES = new HashMap<>();
 
@@ -58,7 +58,7 @@ public final class HostilePerceptionHandler {
     }
 
     private static boolean applyPerceptionDebuff(HostileEntity hostile) {
-        EntityAttributeInstance followRange = hostile.getAttributeInstance(EntityAttributes.GENERIC_FOLLOW_RANGE);
+        EntityAttributeInstance followRange = hostile.getAttributeInstance(EntityAttributes.FOLLOW_RANGE);
         if (followRange == null) {
             return false;
         }
@@ -69,7 +69,7 @@ public final class HostilePerceptionHandler {
         EntityAttributeModifier existing = followRange.getModifier(PERCEPTION_MODIFIER_ID);
         if (!blinded && !darkened) {
             if (existing != null) {
-                followRange.removeModifier(PERCEPTION_MODIFIER_ID);
+                followRange.removeModifier(existing);
             }
             return false;
         }
@@ -84,13 +84,12 @@ public final class HostilePerceptionHandler {
         double amount = keepFactor - 1.0d;
 
         if (existing != null) {
-            followRange.removeModifier(PERCEPTION_MODIFIER_ID);
+            followRange.removeModifier(existing);
         }
         followRange.addTemporaryModifier(new EntityAttributeModifier(
                 PERCEPTION_MODIFIER_ID,
-                PERCEPTION_MODIFIER_NAME,
                 amount,
-                EntityAttributeModifier.Operation.MULTIPLY_TOTAL
+                EntityAttributeModifier.Operation.ADD_MULTIPLIED_TOTAL
         ));
 
         LivingEntity target = hostile.getTarget();

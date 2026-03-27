@@ -5,6 +5,7 @@ import com.example.autoenchants.LockedOnHandler;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
@@ -12,7 +13,6 @@ import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.projectile.FireworkRocketEntity;
 import net.minecraft.entity.projectile.ShulkerBulletEntity;
 import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.hit.BlockHitResult;
@@ -78,14 +78,14 @@ public abstract class FireworkRocketEntityMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void autoenchants$guideTowardLockedTarget(CallbackInfo ci) {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient() || !self.isAlive() || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
+        if (self.getEntityWorld().isClient() || !self.isAlive() || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
             return;
         }
         autoenchants$guidanceAge++;
         if (autoenchants$guidanceAge <= GUIDANCE_DELAY_TICKS) {
             return;
         }
-        if (!(self.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(self.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
         Vec3d velocity = self.getVelocity();
@@ -99,7 +99,7 @@ public abstract class FireworkRocketEntityMixin {
         }
 
         Vec3d currentDir = velocity.normalize();
-        Vec3d desiredDir = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+        Vec3d desiredDir = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(self.getEntityPos());
         if (desiredDir.lengthSquared() < 1.0E-6d) {
             return;
         }
@@ -114,7 +114,7 @@ public abstract class FireworkRocketEntityMixin {
 
     private void autoenchants$detonateBlastIfTagged() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient()) {
+        if (self.getEntityWorld().isClient()) {
             return;
         }
         int blastLevel = autoenchants$findTagLevel(self, BLAST_FIREWORK_TAG_PREFIX);
@@ -123,7 +123,7 @@ public abstract class FireworkRocketEntityMixin {
             return;
         }
 
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         float power = 2.0f + blastLevel;
         world.createExplosion(self, self.getX(), self.getY(), self.getZ(), power, World.ExplosionSourceType.TNT);
         int chainCount = autoenchants$triggerSympatheticDetonation(world, self, blastLevel);
@@ -144,7 +144,7 @@ public abstract class FireworkRocketEntityMixin {
 
     private void autoenchants$handleTaggedHit() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient()) {
+        if (self.getEntityWorld().isClient()) {
             return;
         }
 
@@ -230,7 +230,7 @@ public abstract class FireworkRocketEntityMixin {
         // 若目标已漂移到飞行方向背后（超过最大追踪半角），放弃并重新搜索，
         // 避免烟花因试图掉头追踪身后目标而向下螺旋。
         if (currentTarget != null) {
-            Vec3d toTarget = currentTarget.getPos().add(0.0d, currentTarget.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+            Vec3d toTarget = currentTarget.getEntityPos().add(0.0d, currentTarget.getHeight() * 0.5d, 0.0d).subtract(self.getEntityPos());
             if (toTarget.lengthSquared() > 1.0E-6d) {
                 double alignment = forward.dotProduct(toTarget.normalize());
                 double cosMaxTrack = Math.cos(Math.toRadians(GUIDANCE_MAX_TRACK_HALF_ANGLE));
@@ -272,7 +272,7 @@ public abstract class FireworkRocketEntityMixin {
     private LivingEntity autoenchants$findBestLockedInCone(ServerWorld world, Entity self, Vec3d forward, double halfAngleDeg, Entity owner) {
         return LockedOnHandler.findBestLockedTargetInCone(
                 world,
-                self.getPos(),
+                self.getEntityPos(),
                 forward,
                 GUIDANCE_CONE_RANGE,
                 halfAngleDeg,
@@ -290,10 +290,10 @@ public abstract class FireworkRocketEntityMixin {
 
         LivingEntity best = null;
         double bestScore = -Double.MAX_VALUE;
-        Vec3d selfPos = self.getPos();
+        Vec3d selfPos = self.getEntityPos();
         for (int i = 0, size = candidates.size(); i < size; i++) {
             HostileEntity candidate = candidates.get(i);
-            Vec3d toCandidate = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(selfPos);
+            Vec3d toCandidate = candidate.getEntityPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(selfPos);
             double distSq = toCandidate.lengthSquared();
             if (distSq < 1.0E-6d || distSq > GUIDANCE_CONE_RANGE * GUIDANCE_CONE_RANGE) {
                 continue;
@@ -315,7 +315,7 @@ public abstract class FireworkRocketEntityMixin {
 
     private void autoenchants$refreshGuidedTargetLockIfNeeded() {
         Entity self = (Entity) (Object) this;
-        if (!(self.getWorld() instanceof ServerWorld serverWorld) || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
+        if (!(self.getEntityWorld() instanceof ServerWorld serverWorld) || !self.getCommandTags().contains(PRECISE_GUIDANCE_TAG)) {
             return;
         }
         if (autoenchants$guidedTargetId == null || !autoenchants$targetIsLocked) {
@@ -329,7 +329,7 @@ public abstract class FireworkRocketEntityMixin {
 
     private void autoenchants$spawnShulkerBulletsIfTagged() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient()) {
+        if (self.getEntityWorld().isClient()) {
             return;
         }
 
@@ -343,7 +343,7 @@ public abstract class FireworkRocketEntityMixin {
             return;
         }
 
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         List<HostileEntity> targets = world.getEntitiesByClass(
                 HostileEntity.class,
                 self.getBoundingBox().expand(24.0d),
@@ -369,46 +369,44 @@ public abstract class FireworkRocketEntityMixin {
 
     private void autoenchants$spawnGolemIfTagged() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient() || !self.getCommandTags().contains(FIREWORK_GOLEM_TAG)) {
+        if (self.getEntityWorld().isClient() || !self.getCommandTags().contains(FIREWORK_GOLEM_TAG)) {
             return;
         }
 
-        IronGolemEntity golem = EntityType.IRON_GOLEM.create(self.getWorld());
+        IronGolemEntity golem = EntityType.IRON_GOLEM.create(self.getEntityWorld(), SpawnReason.TRIGGERED);
         if (golem == null) {
             return;
         }
         golem.refreshPositionAndAngles(self.getX(), self.getY(), self.getZ(), self.getYaw(), self.getPitch());
-        self.getWorld().spawnEntity(golem);
-        autoenchants$spawnGolemParticles(self.getWorld(), golem.getX(), golem.getY(), golem.getZ());
+        self.getEntityWorld().spawnEntity(golem);
+        autoenchants$spawnGolemParticles(self.getEntityWorld(), golem.getX(), golem.getY(), golem.getZ());
         self.removeCommandTag(FIREWORK_GOLEM_TAG);
     }
 
     private void autoenchants$spawnCreeperIfTagged() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient() || !self.getCommandTags().contains(FIREWORK_CREEPER_TAG)) {
+        if (self.getEntityWorld().isClient() || !self.getCommandTags().contains(FIREWORK_CREEPER_TAG)) {
             return;
         }
 
-        CreeperEntity creeper = EntityType.CREEPER.create(self.getWorld());
+        CreeperEntity creeper = EntityType.CREEPER.create(self.getEntityWorld(), SpawnReason.TRIGGERED);
         if (creeper == null) {
             return;
         }
 
         creeper.refreshPositionAndAngles(self.getX(), self.getY(), self.getZ(), self.getYaw(), self.getPitch());
-        boolean charged = self.getWorld().random.nextFloat() < 0.1f;
+        boolean charged = self.getEntityWorld().random.nextFloat() < 0.1f;
         if (charged) {
-            NbtCompound nbt = creeper.writeNbt(new NbtCompound());
-            nbt.putBoolean("powered", true);
-            creeper.readNbt(nbt);
+            creeper.onStruckByLightning((ServerWorld) self.getEntityWorld(), EntityType.LIGHTNING_BOLT.create((ServerWorld) self.getEntityWorld(), SpawnReason.TRIGGERED));
         }
-        self.getWorld().spawnEntity(creeper);
-        autoenchants$spawnCreeperParticles(self.getWorld(), creeper.getX(), creeper.getY(), creeper.getZ(), charged);
+        self.getEntityWorld().spawnEntity(creeper);
+        autoenchants$spawnCreeperParticles(self.getEntityWorld(), creeper.getX(), creeper.getY(), creeper.getZ(), charged);
         self.removeCommandTag(FIREWORK_CREEPER_TAG);
     }
 
     private void autoenchants$spawnVexesIfTagged() {
         Entity self = (Entity) (Object) this;
-        if (self.getWorld().isClient()) {
+        if (self.getEntityWorld().isClient()) {
             return;
         }
 
@@ -422,7 +420,7 @@ public abstract class FireworkRocketEntityMixin {
             return;
         }
 
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         int vexCount = vexLevel;
 
         List<HostileEntity> targets = world.getEntitiesByClass(
@@ -441,7 +439,7 @@ public abstract class FireworkRocketEntityMixin {
         autoenchants$spawnVexParticles(world, self.getX(), self.getY(), self.getZ(), vexCount);
         
         for (int i = 0; i < vexCount; i++) {
-            net.minecraft.entity.mob.VexEntity vex = EntityType.VEX.create(world);
+            net.minecraft.entity.mob.VexEntity vex = EntityType.VEX.create(world, SpawnReason.TRIGGERED);
             if (vex == null) {
                 continue;
             }
@@ -494,7 +492,7 @@ public abstract class FireworkRocketEntityMixin {
                 entity -> entity.isAlive() && entity != source
         );
         for (TntEntity tnt : tntEntities) {
-            autoenchants$spawnFlameTrail(world, source.getPos(), tnt.getPos(), 24);
+            autoenchants$spawnFlameTrail(world, source.getEntityPos(), tnt.getEntityPos(), 24);
             autoenchants$launchEntityFromSource(source, tnt, BLAST_LAUNCHED_TNT_TAG, 1.35d + blastLevel * 0.12d);
             triggered++;
         }
@@ -505,7 +503,7 @@ public abstract class FireworkRocketEntityMixin {
                 entity -> entity.isAlive() && entity != source
         );
         for (CreeperEntity creeper : creepers) {
-            autoenchants$spawnFlameTrail(world, source.getPos(), creeper.getPos(), 20);
+            autoenchants$spawnFlameTrail(world, source.getEntityPos(), creeper.getEntityPos(), 20);
             autoenchants$launchEntityFromSource(source, creeper, BLAST_LAUNCHED_CREEPER_TAG, 1.20d + blastLevel * 0.1d);
             triggered++;
         }
@@ -520,7 +518,7 @@ public abstract class FireworkRocketEntityMixin {
                     }
                     autoenchants$spawnFlameTrail(
                             world,
-                            source.getPos(),
+                            source.getEntityPos(),
                             new Vec3d(pos.getX() + 0.5d, pos.getY() + 0.5d, pos.getZ() + 0.5d),
                             18
                     );
@@ -544,16 +542,16 @@ public abstract class FireworkRocketEntityMixin {
     }
 
     private void autoenchants$launchEntityFromSource(Entity source, Entity target, String tag, double speed) {
-        Vec3d direction = target.getPos().subtract(source.getPos());
+        Vec3d direction = target.getEntityPos().subtract(source.getEntityPos());
         if (direction.lengthSquared() < 1.0E-5d) {
             direction = new Vec3d(
-                    source.getWorld().random.nextDouble() - 0.5d,
+                    source.getEntityWorld().random.nextDouble() - 0.5d,
                     0.0d,
-                    source.getWorld().random.nextDouble() - 0.5d
+                    source.getEntityWorld().random.nextDouble() - 0.5d
             );
         }
         direction = direction.normalize();
-        double upward = 0.45d + source.getWorld().random.nextDouble() * 0.25d;
+        double upward = 0.45d + source.getEntityWorld().random.nextDouble() * 0.25d;
         Vec3d velocity = new Vec3d(direction.x * speed, upward, direction.z * speed);
         target.setVelocity(velocity);
         target.velocityModified = true;
@@ -597,7 +595,7 @@ public abstract class FireworkRocketEntityMixin {
         }
         int amount = Math.min(60, 18 + bulletCount * 3);
         serverWorld.spawnParticles(ParticleTypes.END_ROD, x, y + 0.3d, z, amount, 0.6d, 0.45d, 0.6d, 0.05d);
-        serverWorld.spawnParticles(ParticleTypes.DRAGON_BREATH, x, y + 0.2d, z, amount / 2, 0.45d, 0.3d, 0.45d, 0.02d);
+        serverWorld.spawnParticles(ParticleTypes.PORTAL, x, y + 0.2d, z, amount / 2, 0.45d, 0.3d, 0.45d, 0.02d);
     }
 
     private void autoenchants$spawnGolemParticles(World world, double x, double y, double z) {

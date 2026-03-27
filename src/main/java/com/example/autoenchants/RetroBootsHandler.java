@@ -1,10 +1,12 @@
 package com.example.autoenchants;
 
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -35,7 +37,10 @@ public final class RetroBootsHandler {
     }
 
     private static void tickPlayer(ServerPlayerEntity player) {
-        if (player.isSpectator() || player.isOnGround() || player.isFallFlying()) {
+        RegistryEntry<StatusEffect> cooldownEffect = player.getRegistryManager()
+                .getOrThrow(RegistryKeys.STATUS_EFFECT)
+                .getEntry(AutoEnchantsMod.RETRO_BOOTS_COOLDOWN);
+        if (player.isSpectator() || player.isOnGround() || player.isGliding()) {
             return;
         }
 
@@ -45,11 +50,11 @@ public final class RetroBootsHandler {
         }
 
         ItemStack boots = player.getEquippedStack(EquipmentSlot.FEET);
-        if (boots.isEmpty() || EnchantmentHelper.getLevel(AutoEnchantsMod.RETRO_BOOTS, boots) <= 0) {
+        if (boots.isEmpty() || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.RETRO_BOOTS, boots) <= 0) {
             return;
         }
 
-        if (player.hasStatusEffect(AutoEnchantsMod.RETRO_BOOTS_COOLDOWN)) {
+        if (player.hasStatusEffect(cooldownEffect)) {
             return;
         }
 
@@ -58,21 +63,17 @@ public final class RetroBootsHandler {
             return;
         }
 
-        // Apply retro thrust
         double thrust = Math.min(Math.abs(velocity.y) * RETRO_THRUST_FACTOR, MAX_THRUST);
         player.setVelocity(velocity.x, velocity.y + thrust, velocity.z);
         player.velocityModified = true;
         player.fallDistance *= FALL_DISTANCE_FACTOR;
 
-        // Spawn cone-shaped jet particles
-        spawnRetroParticles((ServerWorld) player.getWorld(), player.getX(), player.getY(), player.getZ());
+        spawnRetroParticles((ServerWorld) player.getEntityWorld(), player.getX(), player.getY(), player.getZ());
 
-        // Damage boots
-        boots.damage(1, player, p -> p.sendEquipmentBreakStatus(EquipmentSlot.FEET));
+        boots.damage(1, player, EquipmentSlot.FEET);
 
-        // Start cooldown
         player.addStatusEffect(new StatusEffectInstance(
-                AutoEnchantsMod.RETRO_BOOTS_COOLDOWN, COOLDOWN_TICKS, 0, false, false, true));
+                cooldownEffect, COOLDOWN_TICKS, 0, false, false, true));
     }
 
     /**
@@ -85,7 +86,7 @@ public final class RetroBootsHandler {
                 MathHelper.floor(player.getZ()));
         int minY = MathHelper.floor(player.getY() - GROUND_CHECK_DISTANCE);
         while (pos.getY() >= minY) {
-            if (player.getWorld().getBlockState(pos).isSideSolidFullSquare(player.getWorld(), pos, Direction.UP)) {
+            if (player.getEntityWorld().getBlockState(pos).isSideSolidFullSquare(player.getEntityWorld(), pos, Direction.UP)) {
                 return player.getY() - (pos.getY() + 1.0d);
             }
             pos.move(Direction.DOWN);

@@ -1,0 +1,22 @@
+{
+  "anvil_cost": 3,
+  "description": {
+    "translate": "enchantment.autoenchants.reaction_armor"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 36,
+    "per_level_above_first": 8
+  },
+  "max_level": 5,
+  "min_cost": {
+    "base": 12,
+    "per_level_above_first": 8
+  },
+  "primary_items": "#autoenchants:enchantable/reaction_armor",
+  "slots": [
+    "chest"
+  ],
+  "supported_items": "#autoenchants:enchantable/reaction_armor",
+  "weight": 2
+}

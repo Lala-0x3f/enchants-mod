@@ -1,17 +1,17 @@
 package com.example.autoenchants;
 
-import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.InstrumentComponent;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.particle.ShriekParticleEffect;
 import net.minecraft.particle.VibrationParticleEffect;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -36,17 +36,19 @@ public final class RequiemHornHandler {
         for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
             UUID playerId = player.getUuid();
             ItemStack stack = player.getMainHandStack();
-            int level = EnchantmentHelper.getLevel(AutoEnchantsMod.REQUIEM, stack);
+            int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.REQUIEM, stack);
             boolean usingRequiemHorn = player.isUsingItem() && stack.isOf(Items.GOAT_HORN) && level > 0;
+            ServerWorld world = (ServerWorld) player.getEntityWorld();
+            String dimensionId = world.getRegistryKey().getValue().toString();
 
             if (usingRequiemHorn) {
                 ActiveRequiem active = ACTIVE.computeIfAbsent(
                         playerId,
-                        id -> new ActiveRequiem(level, getInstrumentId(stack), player.getServerWorld().getRegistryKey().getValue().toString())
+                        id -> new ActiveRequiem(level, getInstrumentId(stack), dimensionId)
                 );
                 active.level = level;
                 active.instrumentId = getInstrumentId(stack);
-                active.dimension = player.getServerWorld().getRegistryKey().getValue().toString();
+                active.dimension = dimensionId;
                 processRequiemTick(player, active);
             } else {
                 ActiveRequiem ended = ACTIVE.remove(playerId);
@@ -58,7 +60,7 @@ public final class RequiemHornHandler {
     }
 
     private static void processRequiemTick(ServerPlayerEntity player, ActiveRequiem active) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getEntityWorld();
         int chunkRange = 8 + active.level;
         double blockRange = chunkRange * 16.0d;
         long now = world.getTime();
@@ -83,7 +85,7 @@ public final class RequiemHornHandler {
     }
 
     private static void finishRequiem(ServerPlayerEntity player, ActiveRequiem active) {
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = (ServerWorld) player.getEntityWorld();
         if (!world.getRegistryKey().getValue().toString().equals(active.dimension)) {
             return;
         }
@@ -98,7 +100,7 @@ public final class RequiemHornHandler {
                 continue;
             }
             spawnSonicRain(world, target.getX(), target.getY(), target.getZ(), target.getHeight());
-            target.damage(player.getDamageSources().sonicBoom(player), damage);
+            target.damage(world, player.getDamageSources().sonicBoom(player), damage);
             knockTargetBack(player, target, active.level);
             world.spawnParticles(ParticleTypes.SCULK_CHARGE_POP, target.getX(), target.getBodyY(0.6d), target.getZ(), 22, 0.35d, 0.35d, 0.35d, 0.01d);
             world.spawnParticles(ParticleTypes.ENCHANT, target.getX(), target.getBodyY(0.6d), target.getZ(), 26, 0.45d, 0.45d, 0.45d, 0.02d);
@@ -139,7 +141,7 @@ public final class RequiemHornHandler {
     }
 
     private static void knockTargetBack(ServerPlayerEntity player, LivingEntity target, int level) {
-        Vec3d horizontal = target.getPos().subtract(player.getPos());
+        Vec3d horizontal = target.getEntityPos().subtract(player.getEntityPos());
         horizontal = new Vec3d(horizontal.x, 0.0d, horizontal.z);
         if (horizontal.lengthSquared() < 1.0E-4d) {
             horizontal = player.getRotationVec(1.0f);
@@ -169,11 +171,11 @@ public final class RequiemHornHandler {
     }
 
     private static String getInstrumentId(ItemStack stack) {
-        NbtCompound nbt = stack.getNbt();
-        if (nbt == null) {
+        InstrumentComponent instrument = stack.get(DataComponentTypes.INSTRUMENT);
+        if (instrument == null) {
             return "minecraft:ponder_goat_horn";
         }
-        return nbt.getString("instrument");
+        return instrument.instrument().getKey().map(key -> key.getValue().toString()).orElse("minecraft:ponder_goat_horn");
     }
 
     private static final class ActiveRequiem {

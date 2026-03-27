@@ -1,0 +1,23 @@
+{
+  "anvil_cost": 4,
+  "description": {
+    "translate": "enchantment.autoenchants.automatic"
+  },
+  "effects": {},
+  "exclusive_set": "#autoenchants:exclusive_set/automatic_triple_burst",
+  "max_cost": {
+    "base": 37,
+    "per_level_above_first": 10
+  },
+  "max_level": 5,
+  "min_cost": {
+    "base": 12,
+    "per_level_above_first": 10
+  },
+  "primary_items": "#minecraft:enchantable/crossbow",
+  "slots": [
+    "mainhand"
+  ],
+  "supported_items": "#minecraft:enchantable/crossbow",
+  "weight": 1
+}

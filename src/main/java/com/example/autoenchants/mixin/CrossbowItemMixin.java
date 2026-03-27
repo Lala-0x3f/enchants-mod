@@ -1,7 +1,6 @@
 package com.example.autoenchants.mixin;
 
 import com.example.autoenchants.AutoEnchantsMod;
-import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
@@ -70,30 +69,30 @@ public abstract class CrossbowItemMixin {
             float divergenceArgument,
             float simulated
     ) {
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_SHOOTER, crossbow);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.PRECISE_SHOOTER, crossbow);
         float boostedSpeed = speed * AutoEnchantsMod.getPreciseShooterMultiplier(level);
         float improvedDivergence = AutoEnchantsMod.getPreciseShooterDivergence(divergence, level);
-        int blastLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.BLAST_FIREWORK, crossbow);
+        int blastLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.BLAST_FIREWORK, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && blastLevel > 0) {
             projectile.addCommandTag(BLAST_FIREWORK_TAG_PREFIX + blastLevel);
         }
-        int shulkerLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_SHULKER, crossbow);
+        int shulkerLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_SHULKER, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && shulkerLevel > 0) {
             projectile.addCommandTag(FIREWORK_SHULKER_TAG_PREFIX + shulkerLevel);
         }
-        int golemLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_GOLEM, crossbow);
+        int golemLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_GOLEM, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && golemLevel > 0) {
             projectile.addCommandTag(FIREWORK_GOLEM_TAG);
         }
-        int creeperLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_CREEPER, crossbow);
+        int creeperLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_CREEPER, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && creeperLevel > 0) {
             projectile.addCommandTag(FIREWORK_CREEPER_TAG);
         }
-        int vexLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow);
+        int vexLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && vexLevel > 0) {
             projectile.addCommandTag(FIREWORK_VEX_TAG_PREFIX + vexLevel);
         }
-        int guidanceLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow);
+        int guidanceLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow);
         if (projectileStack.getItem() instanceof FireworkRocketItem && guidanceLevel > 0) {
             projectile.addCommandTag(PRECISE_GUIDANCE_TAG);
             if (world instanceof ServerWorld serverWorld) {
@@ -114,12 +113,12 @@ public abstract class CrossbowItemMixin {
     }
 
     private static boolean autoenchants$requiresFireworkOnly(ItemStack crossbow) {
-        return EnchantmentHelper.getLevel(AutoEnchantsMod.BLAST_FIREWORK, crossbow) > 0
-                || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_SHULKER, crossbow) > 0
-                || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_GOLEM, crossbow) > 0
-                || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_CREEPER, crossbow) > 0
-                || EnchantmentHelper.getLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow) > 0
-                || EnchantmentHelper.getLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow) > 0;
+        return AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.BLAST_FIREWORK, crossbow) > 0
+                || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_SHULKER, crossbow) > 0
+                || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_GOLEM, crossbow) > 0
+                || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_CREEPER, crossbow) > 0
+                || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.FIREWORK_VEX, crossbow) > 0
+                || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.PRECISE_GUIDANCE, crossbow) > 0;
     }
 
     private static ItemStack autoenchants$findFireworkProjectile(LivingEntity shooter) {

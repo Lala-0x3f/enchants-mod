@@ -51,13 +51,13 @@ public abstract class TridentEntityMixin {
     @Inject(method = "tick", at = @At("HEAD"))
     private void autoenchants$onTick(CallbackInfo ci) {
         TridentEntity self = (TridentEntity) (Object) this;
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         if (world.isClient()) {
             return;
         }
 
         ItemStack stack = self.getItemStack();
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
         if (level <= 0) {
             return;
         }
@@ -89,7 +89,7 @@ public abstract class TridentEntityMixin {
         // 锁定状态优先目标并持续保活。
         LockedOnHandler.applyLockedAndGlow(target, 20);
 
-        Vec3d toTarget = target.getPos().add(0.0d, target.getHeight() * 0.6d, 0.0d).subtract(self.getPos());
+        Vec3d toTarget = target.getEntityPos().add(0.0d, target.getHeight() * 0.6d, 0.0d).subtract(self.getEntityPos());
         if (toTarget.lengthSquared() < 1.0E-5d) {
             return;
         }
@@ -111,7 +111,7 @@ public abstract class TridentEntityMixin {
     @Inject(method = "onEntityHit", at = @At("TAIL"))
     private void autoenchants$onEntityHit(EntityHitResult hitResult, CallbackInfo ci) {
         TridentEntity self = (TridentEntity) (Object) this;
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         autoenchants$lockedTarget = null;
         autoenchants$bombardComplete = true;
         if (world.isClient()) {
@@ -119,7 +119,7 @@ public abstract class TridentEntityMixin {
         }
 
         ItemStack stack = self.getItemStack();
-        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
+        int level = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
         if (level > 0) {
             Entity ownerEntity = self.getOwner();
             if (ownerEntity instanceof LivingEntity owner) {
@@ -136,9 +136,9 @@ public abstract class TridentEntityMixin {
                 );
 
                 for (LivingEntity victim : victims) {
-                    victim.damage(owner.getDamageSources().trident(self, owner), (float) baseDamage);
+                    victim.damage((ServerWorld) world, owner.getDamageSources().trident(self, owner), (float) baseDamage);
                     victim.addStatusEffect(new StatusEffectInstance(StatusEffects.WEAKNESS, 100 + level * 20, 0, false, true, true));
-                    Vec3d knockDir = victim.getPos().subtract(self.getPos());
+                    Vec3d knockDir = victim.getEntityPos().subtract(self.getEntityPos());
                     if (knockDir.lengthSquared() < 1.0E-5d) {
                         knockDir = new Vec3d(0.0d, 1.0d, 0.0d);
                     } else {
@@ -156,9 +156,9 @@ public abstract class TridentEntityMixin {
                 float explosionPower = 1.0f + 0.2f * level;
                 world.createExplosion(owner, self.getX(), self.getY(), self.getZ(), explosionPower, false, World.ExplosionSourceType.MOB);
 
-                if (EnchantmentHelper.getLevel(Enchantments.CHANNELING, stack) > 0 && world instanceof ServerWorld serverWorld) {
+                if (AutoEnchantsMod.getEnchantmentLevel(Enchantments.CHANNELING, stack) > 0 && world instanceof ServerWorld serverWorld) {
                     for (LivingEntity victim : victims) {
-                        LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+                        LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(serverWorld, net.minecraft.entity.SpawnReason.TRIGGERED);
                         if (lightning == null) {
                             continue;
                         }
@@ -172,7 +172,7 @@ public abstract class TridentEntityMixin {
         }
 
         // 爆炸三叉戟附魔效果
-        int explosiveLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.EXPLOSIVE_TRIDENT, stack);
+        int explosiveLevel = AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.EXPLOSIVE_TRIDENT, stack);
         if (explosiveLevel > 0 && !autoenchants$hasHitEntity) {
             autoenchants$hasHitEntity = true;
             Entity hitEntity = hitResult.getEntity();
@@ -220,9 +220,9 @@ public abstract class TridentEntityMixin {
 
     @Unique
     private boolean autoenchants$hasLineOfSight(TridentEntity self, LivingEntity target) {
-        World world = self.getWorld();
-        Vec3d start = self.getPos();
-        Vec3d end = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        World world = self.getEntityWorld();
+        Vec3d start = self.getEntityPos();
+        Vec3d end = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
         
         HitResult hitResult = world.raycast(new RaycastContext(
                 start,
@@ -237,7 +237,7 @@ public abstract class TridentEntityMixin {
 
     @Unique
     private LivingEntity autoenchants$getOrAcquireTarget(TridentEntity self, int level) {
-        World world = self.getWorld();
+        World world = self.getEntityWorld();
         if (autoenchants$lockedTarget != null) {
             Entity existing = ((ServerWorld) world).getEntity(autoenchants$lockedTarget);
             if (existing instanceof LivingEntity living && living.isAlive()) {
@@ -261,7 +261,7 @@ public abstract class TridentEntityMixin {
         if (world instanceof ServerWorld serverWorld) {
             LivingEntity lockedTarget = LockedOnHandler.findBestLockedTargetInCone(
                     serverWorld,
-                    self.getPos(),
+                    self.getEntityPos(),
                     forward,
                     26.0d + level * 8.0d,
                     50.0d,
@@ -284,7 +284,7 @@ public abstract class TridentEntityMixin {
         LivingEntity best = null;
         double bestScore = -Double.MAX_VALUE;
         for (HostileEntity candidate : candidates) {
-            Vec3d to = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+            Vec3d to = candidate.getEntityPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(self.getEntityPos());
             if (to.lengthSquared() < 1.0E-5d) {
                 continue;
             }

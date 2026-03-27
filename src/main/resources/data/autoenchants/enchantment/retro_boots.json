@@ -1,0 +1,22 @@
+{
+  "anvil_cost": 3,
+  "description": {
+    "translate": "enchantment.autoenchants.retro_boots"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 39,
+    "per_level_above_first": 0
+  },
+  "max_level": 1,
+  "min_cost": {
+    "base": 15,
+    "per_level_above_first": 0
+  },
+  "primary_items": "#minecraft:enchantable/foot_armor",
+  "slots": [
+    "feet"
+  ],
+  "supported_items": "#minecraft:enchantable/foot_armor",
+  "weight": 2
+}

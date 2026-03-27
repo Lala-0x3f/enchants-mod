@@ -26,11 +26,13 @@ import net.minecraft.entity.mob.WardenEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.tag.DamageTypeTags;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.storage.ReadView;
+import net.minecraft.storage.WriteView;
 import net.minecraft.util.Arm;
+import net.minecraft.util.Uuids;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
@@ -99,7 +101,7 @@ public class SquidMissileEntity extends LivingEntity {
         super(entityType, world);
         this.noClip = false;
         // Set compact bounding box for missile (width x height)
-        this.setBoundingBox(this.getDimensions(this.getPose()).getBoxAt(this.getPos()));
+        this.setBoundingBox(this.getDimensions(this.getPose()).getBoxAt(this.getEntityPos()));
     }
 
     @Override
@@ -112,17 +114,17 @@ public class SquidMissileEntity extends LivingEntity {
     }
 
     @Override
-    public net.minecraft.entity.EntityDimensions getDimensions(net.minecraft.entity.EntityPose pose) {
+    protected net.minecraft.entity.EntityDimensions getBaseDimensions(net.minecraft.entity.EntityPose pose) {
         // Compact missile dimensions: 0.5 wide x 0.8 tall
         return net.minecraft.entity.EntityDimensions.fixed(0.5f, 0.8f);
     }
 
     public static DefaultAttributeContainer.Builder createMissileAttributes() {
         return LivingEntity.createLivingAttributes()
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, 4.0d)
-                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.0d)
-                .add(EntityAttributes.GENERIC_KNOCKBACK_RESISTANCE, 1.0d)
-                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, 0.0d);
+                .add(EntityAttributes.MAX_HEALTH, 4.0d)
+                .add(EntityAttributes.MOVEMENT_SPEED, 0.0d)
+                .add(EntityAttributes.KNOCKBACK_RESISTANCE, 1.0d)
+                .add(EntityAttributes.FOLLOW_RANGE, 0.0d);
     }
 
     public void setOwner(@Nullable PlayerEntity owner) {
@@ -131,7 +133,7 @@ public class SquidMissileEntity extends LivingEntity {
 
     @Nullable
     public Entity getOwnerEntity() {
-        if (ownerUuid == null || !(getWorld() instanceof ServerWorld serverWorld)) return null;
+        if (ownerUuid == null || !(getEntityWorld() instanceof ServerWorld serverWorld)) return null;
         return serverWorld.getEntity(ownerUuid);
     }
 
@@ -146,7 +148,7 @@ public class SquidMissileEntity extends LivingEntity {
 
         super.tick();
 
-        if (getWorld().isClient()) return;
+        if (getEntityWorld().isClient()) return;
 
         totalFlightTicks++;
         if (totalFlightTicks > MAX_LIFETIME_TICKS) {
@@ -173,14 +175,14 @@ public class SquidMissileEntity extends LivingEntity {
             transitionTo(Phase.ASCENDING);
         } else if (ticksInPhase >= GROUND_WAIT_TICKS - 5) {
             // Pre-ignition smoke
-            if (getWorld() instanceof ServerWorld sw) {
+            if (getEntityWorld() instanceof ServerWorld sw) {
                 sw.spawnParticles(ParticleTypes.SMOKE, getX(), getY() + 0.2d, getZ(), 3, 0.15d, 0.05d, 0.15d, 0.01d);
             }
         }
     }
 
     private void ignite() {
-        if (!(getWorld() instanceof ServerWorld sw)) return;
+        if (!(getEntityWorld() instanceof ServerWorld sw)) return;
         // Ignite ground in 3x3 area
         BlockPos base = getBlockPos().down();
         for (int dx = -1; dx <= 1; dx++) {
@@ -222,7 +224,7 @@ public class SquidMissileEntity extends LivingEntity {
     }
 
     private void spawnAscentParticles() {
-        if (!(getWorld() instanceof ServerWorld sw)) return;
+        if (!(getEntityWorld() instanceof ServerWorld sw)) return;
         // Flame exhaust
         sw.spawnParticles(ParticleTypes.FLAME, getX(), getY() - 0.3d, getZ(), 5, 0.1d, 0.05d, 0.1d, 0.02d);
         sw.spawnParticles(ParticleTypes.SQUID_INK, getX(), getY() - 0.2d, getZ(), 3, 0.15d, 0.1d, 0.15d, 0.01d);
@@ -251,7 +253,7 @@ public class SquidMissileEntity extends LivingEntity {
                     relayPoint = new Vec3d(midX, apexY, midZ);
                 }
 
-                Vec3d toRelay = relayPoint.subtract(getPos());
+                Vec3d toRelay = relayPoint.subtract(getEntityPos());
                 double distToRelay = toRelay.length();
 
                 if (distToRelay < 5.0d || (getY() >= relayPoint.y && vel.y <= 0.0d)) {
@@ -265,8 +267,8 @@ public class SquidMissileEntity extends LivingEntity {
                 double blend = 1.0d - MathHelper.clamp(targetBelowApex / 20.0d, 0.0d, 1.0d);
 
                 Vec3d relayDir = toRelay.normalize();
-                Vec3d targetPos = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
-                Vec3d targetDir = targetPos.subtract(getPos()).normalize();
+                Vec3d targetPos = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+                Vec3d targetDir = targetPos.subtract(getEntityPos()).normalize();
 
                 Vec3d desiredDir;
                 if (blend < 0.01d) {
@@ -315,7 +317,7 @@ public class SquidMissileEntity extends LivingEntity {
     // ==================== TARGET ACQUISITION STATE MACHINE ====================
 
     private void tickAcquisition() {
-        if (!(getWorld() instanceof ServerWorld sw)) return;
+        if (!(getEntityWorld() instanceof ServerWorld sw)) return;
 
         // Check ballistic timeout
         if (!ballisticMode && guidanceSearchTicks >= NO_TARGET_BALLISTIC_TICKS) {
@@ -335,14 +337,14 @@ public class SquidMissileEntity extends LivingEntity {
         Entity owner = getOwnerEntity();
 
         // Priority 1: Locked-on targets - prefer distant ones
-        List<LivingEntity> lockedTargets = LockedOnHandler.findAllLockedTargets(sw, getPos(), SEARCH_RANGE);
+        List<LivingEntity> lockedTargets = LockedOnHandler.findAllLockedTargets(sw, getEntityPos(), SEARCH_RANGE);
         if (!lockedTargets.isEmpty()) {
             // Filter out excluded targets and find the farthest valid locked target
             LivingEntity bestLocked = null;
             double maxDist = 0.0d;
             for (LivingEntity locked : lockedTargets) {
                 if (!isExcluded(locked)) {
-                    double dist = locked.getPos().distanceTo(getPos());
+                    double dist = locked.getEntityPos().distanceTo(getEntityPos());
                     if (dist > maxDist) {
                         maxDist = dist;
                         bestLocked = locked;
@@ -370,10 +372,10 @@ public class SquidMissileEntity extends LivingEntity {
 
         LivingEntity best = null;
         double bestScore = -Double.MAX_VALUE;
-        Vec3d myPos = getPos();
+        Vec3d myPos = getEntityPos();
 
         for (LivingEntity candidate : candidates) {
-            double dist = candidate.getPos().distanceTo(myPos);
+            double dist = candidate.getEntityPos().distanceTo(myPos);
             if (dist > SEARCH_RANGE) continue;
 
             double score = 0.0d;
@@ -427,7 +429,7 @@ public class SquidMissileEntity extends LivingEntity {
             return;
         }
 
-        Vec3d targetCenter = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d);
+        Vec3d targetCenter = candidate.getEntityPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d);
 
         BlockHitResult hitResult = sw.raycast(new RaycastContext(
                 candidateApex,
@@ -507,7 +509,7 @@ public class SquidMissileEntity extends LivingEntity {
     }
 
     private void spawnGuidanceParticles() {
-        if (!(getWorld() instanceof ServerWorld sw)) return;
+        if (!(getEntityWorld() instanceof ServerWorld sw)) return;
         sw.spawnParticles(ParticleTypes.SQUID_INK, getX(), getY(), getZ(), 2, 0.08d, 0.08d, 0.08d, 0.01d);
         if (random.nextInt(3) == 0) {
             sw.spawnParticles(ParticleTypes.FIREWORK, getX(), getY(), getZ(), 1, 0.05d, 0.05d, 0.05d, 0.01d);
@@ -531,8 +533,8 @@ public class SquidMissileEntity extends LivingEntity {
                 LockedOnHandler.applyLockedAndGlow(target, 40);
             }
 
-            Vec3d targetPos = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
-            Vec3d toTarget = targetPos.subtract(getPos());
+            Vec3d targetPos = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+            Vec3d toTarget = targetPos.subtract(getEntityPos());
 
             // Check proximity fuse for flying entities
             if (!target.isOnGround() && toTarget.length() < PROXIMITY_FUSE_RANGE) {
@@ -554,7 +556,7 @@ public class SquidMissileEntity extends LivingEntity {
     }
 
     private void spawnDiveParticles() {
-        if (!(getWorld() instanceof ServerWorld sw)) return;
+        if (!(getEntityWorld() instanceof ServerWorld sw)) return;
         sw.spawnParticles(ParticleTypes.WHITE_SMOKE, getX(), getY(), getZ(), 2, 0.06d, 0.06d, 0.06d, 0.005d);
         sw.spawnParticles(ParticleTypes.SQUID_INK, getX(), getY(), getZ(), 1, 0.05d, 0.05d, 0.05d, 0.01d);
     }
@@ -584,7 +586,7 @@ public class SquidMissileEntity extends LivingEntity {
         if (targetUuid != null && entity.getUuid().equals(targetUuid)) return false;
         
         // Exclude targets in dead zone (too close) in all phases
-        double dist = entity.getPos().distanceTo(getPos());
+        double dist = entity.getEntityPos().distanceTo(getEntityPos());
         
         // Dead zone: exclude targets within 25 blocks
         if (dist < 25.0d) {
@@ -605,7 +607,7 @@ public class SquidMissileEntity extends LivingEntity {
 
     @Nullable
     private LivingEntity getTargetEntity() {
-        if (targetUuid == null || !(getWorld() instanceof ServerWorld sw)) return null;
+        if (targetUuid == null || !(getEntityWorld() instanceof ServerWorld sw)) return null;
         Entity entity = sw.getEntity(targetUuid);
         if (entity instanceof LivingEntity living && living.isAlive()) return living;
         targetUuid = null;
@@ -620,13 +622,13 @@ public class SquidMissileEntity extends LivingEntity {
 
         // Check block collision
         Box nextBox = getBoundingBox().stretch(vel).expand(0.05d);
-        if (getWorld().getBlockCollisions(this, nextBox).iterator().hasNext()) {
+        if (getEntityWorld().getBlockCollisions(this, nextBox).iterator().hasNext()) {
             explode();
             return;
         }
 
         // Check entity collision
-        List<Entity> entities = getWorld().getOtherEntities(this, nextBox,
+        List<Entity> entities = getEntityWorld().getOtherEntities(this, nextBox,
                 e -> e.isAlive() && !(e instanceof ProjectileEntity) && e != this && !isOwner(e));
         for (Entity entity : entities) {
             if (entity instanceof LivingEntity) {
@@ -641,16 +643,16 @@ public class SquidMissileEntity extends LivingEntity {
     }
 
     private void explode() {
-        if (getWorld().isClient() || !isAlive()) return;
+        if (getEntityWorld().isClient() || !isAlive()) return;
 
-        ServerWorld sw = (ServerWorld) getWorld();
+        ServerWorld sw = (ServerWorld) getEntityWorld();
         Entity owner = getOwnerEntity();
 
         // Random explosion power 3~5
         float power = 3.0f + random.nextFloat() * 2.0f;
 
         // Create explosion with fire
-        getWorld().createExplosion(
+        getEntityWorld().createExplosion(
                 owner != null ? owner : this,
                 getX(), getY(), getZ(),
                 power, true,
@@ -672,7 +674,7 @@ public class SquidMissileEntity extends LivingEntity {
         LivingEntity target = getTargetEntity();
         if (target != null && target.isAlive()) {
             float directDamage = power * 3.0f;
-            target.damage(getDamageSources().explosion(this, owner instanceof LivingEntity lo ? lo : null), directDamage);
+            target.damage(sw, getDamageSources().explosion(this, owner instanceof LivingEntity lo ? lo : null), directDamage);
         }
 
         discard();
@@ -689,7 +691,7 @@ public class SquidMissileEntity extends LivingEntity {
         );
         for (TntEntity tnt : tntEntities) {
             tnt.setFuse(Math.min(tnt.getFuse(), 5));
-            spawnFlameTrail(sw, getPos(), tnt.getPos());
+            spawnFlameTrail(sw, getEntityPos(), tnt.getEntityPos());
         }
 
         // Ignite creepers
@@ -699,7 +701,7 @@ public class SquidMissileEntity extends LivingEntity {
         );
         for (CreeperEntity creeper : creepers) {
             creeper.ignite();
-            spawnFlameTrail(sw, getPos(), creeper.getPos());
+            spawnFlameTrail(sw, getEntityPos(), creeper.getEntityPos());
         }
 
         // Ignite TNT blocks
@@ -716,7 +718,7 @@ public class SquidMissileEntity extends LivingEntity {
                                 owner instanceof LivingEntity lo ? lo : null);
                         tnt.setFuse(10);
                         sw.spawnEntity(tnt);
-                        spawnFlameTrail(sw, getPos(), new Vec3d(pos.getX() + 0.5d, pos.getY() + 0.5d, pos.getZ() + 0.5d));
+                        spawnFlameTrail(sw, getEntityPos(), new Vec3d(pos.getX() + 0.5d, pos.getY() + 0.5d, pos.getZ() + 0.5d));
                     }
                 }
             }
@@ -787,12 +789,12 @@ public class SquidMissileEntity extends LivingEntity {
     // ==================== DAMAGE & IMMUNITY ====================
 
     @Override
-    public boolean damage(DamageSource source, float amount) {
+    public boolean damage(ServerWorld world, DamageSource source, float amount) {
         // Immune to fire
         if (source.isIn(DamageTypeTags.IS_FIRE)) return false;
         // Immune to potion/magic effects (indirect magic)
         if (source.isOf(DamageTypes.INDIRECT_MAGIC) || source.isOf(DamageTypes.MAGIC)) return false;
-        return super.damage(source, amount);
+        return super.damage(world, source, amount);
     }
 
     @Override
@@ -808,46 +810,45 @@ public class SquidMissileEntity extends LivingEntity {
     // ==================== NBT ====================
 
     @Override
-    public void writeCustomDataToNbt(NbtCompound nbt) {
-        super.writeCustomDataToNbt(nbt);
-        nbt.putInt("Phase", phase.ordinal());
-        nbt.putInt("TicksInPhase", ticksInPhase);
-        nbt.putInt("TotalFlightTicks", totalFlightTicks);
-        nbt.putBoolean("RelayReached", relayReached);
-        nbt.putDouble("LaunchY", launchY);
-        nbt.putInt("GuidanceSearchTicks", guidanceSearchTicks);
-        nbt.putBoolean("BallisticMode", ballisticMode);
-        nbt.putInt("AcqStep", acqStep.ordinal());
-        if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
-        if (targetUuid != null) nbt.putUuid("Target", targetUuid);
-        if (candidateUuid != null) nbt.putUuid("Candidate", candidateUuid);
+    protected void writeCustomData(WriteView view) {
+        super.writeCustomData(view);
+        view.putInt("Phase", phase.ordinal());
+        view.putInt("TicksInPhase", ticksInPhase);
+        view.putInt("TotalFlightTicks", totalFlightTicks);
+        view.putBoolean("RelayReached", relayReached);
+        view.putDouble("LaunchY", launchY);
+        view.putInt("GuidanceSearchTicks", guidanceSearchTicks);
+        view.putBoolean("BallisticMode", ballisticMode);
+        view.putInt("AcqStep", acqStep.ordinal());
+        if (ownerUuid != null) view.put("Owner", Uuids.INT_STREAM_CODEC, ownerUuid);
+        if (targetUuid != null) view.put("Target", Uuids.INT_STREAM_CODEC, targetUuid);
+        if (candidateUuid != null) view.put("Candidate", Uuids.INT_STREAM_CODEC, candidateUuid);
     }
 
     @Override
-    public void readCustomDataFromNbt(NbtCompound nbt) {
-        super.readCustomDataFromNbt(nbt);
-        int phaseOrd = nbt.getInt("Phase");
+    protected void readCustomData(ReadView view) {
+        super.readCustomData(view);
+        int phaseOrd = view.getInt("Phase", phase.ordinal());
         if (phaseOrd >= 0 && phaseOrd < Phase.values().length) {
             phase = Phase.values()[phaseOrd];
         }
-        ticksInPhase = nbt.getInt("TicksInPhase");
-        totalFlightTicks = nbt.getInt("TotalFlightTicks");
-        relayReached = nbt.getBoolean("RelayReached");
-        launchY = nbt.getDouble("LaunchY");
-        guidanceSearchTicks = nbt.getInt("GuidanceSearchTicks");
-        ballisticMode = nbt.getBoolean("BallisticMode");
-        int acqOrd = nbt.getInt("AcqStep");
+        ticksInPhase = view.getInt("TicksInPhase", 0);
+        totalFlightTicks = view.getInt("TotalFlightTicks", 0);
+        relayReached = view.getBoolean("RelayReached", false);
+        launchY = view.getDouble("LaunchY", 0.0d);
+        guidanceSearchTicks = view.getInt("GuidanceSearchTicks", 0);
+        ballisticMode = view.getBoolean("BallisticMode", false);
+        int acqOrd = view.getInt("AcqStep", acqStep.ordinal());
         if (acqOrd >= 0 && acqOrd < AcqStep.values().length) {
             acqStep = AcqStep.values()[acqOrd];
         }
-        if (nbt.containsUuid("Owner")) ownerUuid = nbt.getUuid("Owner");
-        if (nbt.containsUuid("Target")) targetUuid = nbt.getUuid("Target");
-        if (nbt.containsUuid("Candidate")) candidateUuid = nbt.getUuid("Candidate");
+        ownerUuid = view.read("Owner", Uuids.INT_STREAM_CODEC).orElse(null);
+        targetUuid = view.read("Target", Uuids.INT_STREAM_CODEC).orElse(null);
+        candidateUuid = view.read("Candidate", Uuids.INT_STREAM_CODEC).orElse(null);
     }
 
     // ==================== MISC OVERRIDES ====================
 
-    @Override
     public Iterable<ItemStack> getArmorItems() {
         return java.util.Collections.emptyList();
     }

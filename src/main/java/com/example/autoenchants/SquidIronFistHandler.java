@@ -1,5 +1,6 @@
 package com.example.autoenchants;
 
+import net.minecraft.component.DataComponentTypes;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.attribute.EntityAttribute;
@@ -10,7 +11,6 @@ import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.boss.WitherEntity;
-import net.minecraft.entity.mob.FlyingEntity;
 import net.minecraft.entity.mob.GhastEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.MobEntity;
@@ -35,13 +35,15 @@ import net.minecraft.entity.projectile.thrown.PotionEntity;
 import net.minecraft.entity.projectile.thrown.SnowballEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.block.AbstractFireBlock;
+import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ItemStackParticleEffect;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -84,7 +86,7 @@ public final class SquidIronFistHandler {
                 NEXT_THREAT_SCAN_AT.remove(playerId);
                 continue;
             }
-            int level = EnchantmentHelper.getEquipmentLevel(AutoEnchantsMod.SQUID_IRON_FIST, player);
+            int level = AutoEnchantsMod.getEquipmentEnchantmentLevel(AutoEnchantsMod.SQUID_IRON_FIST, player);
             if (level <= 0 || !isOffCooldown(player, now)) {
                 continue;
             }
@@ -113,8 +115,8 @@ public final class SquidIronFistHandler {
     }
 
     private static Entity findIncomingProjectileThreat(ServerPlayerEntity player, double range) {
-        ServerWorld world = player.getServerWorld();
-        Vec3d eye = player.getPos().add(0.0d, player.getStandingEyeHeight() * 0.7d, 0.0d);
+        ServerWorld world = (ServerWorld) player.getEntityWorld();
+        Vec3d eye = player.getEntityPos().add(0.0d, player.getStandingEyeHeight() * 0.7d, 0.0d);
         Box box = player.getBoundingBox().expand(range);
         List<ProjectileEntity> projectiles = world.getEntitiesByClass(
                 ProjectileEntity.class,
@@ -127,7 +129,7 @@ public final class SquidIronFistHandler {
             if (!isApsThreat(entity, player)) {
                 continue;
             }
-            Vec3d toPlayer = eye.subtract(entity.getPos());
+            Vec3d toPlayer = eye.subtract(entity.getEntityPos());
             double distance = toPlayer.length();
             if (distance > range || distance < 1.0E-6d) {
                 continue;
@@ -151,8 +153,8 @@ public final class SquidIronFistHandler {
     }
 
     private static Entity findIncomingFlyingThreat(ServerPlayerEntity player, double range) {
-        ServerWorld world = player.getServerWorld();
-        Vec3d eye = player.getPos().add(0.0d, player.getStandingEyeHeight() * 0.7d, 0.0d);
+        ServerWorld world = (ServerWorld) player.getEntityWorld();
+        Vec3d eye = player.getEntityPos().add(0.0d, player.getStandingEyeHeight() * 0.7d, 0.0d);
         Box box = player.getBoundingBox().expand(range);
         List<MobEntity> entities = world.getEntitiesByClass(
                 MobEntity.class,
@@ -165,7 +167,7 @@ public final class SquidIronFistHandler {
             if (!isApsThreat(entity, player)) {
                 continue;
             }
-            Vec3d toPlayer = eye.subtract(entity.getPos());
+            Vec3d toPlayer = eye.subtract(entity.getEntityPos());
             double distance = toPlayer.length();
             if (distance > range || distance < 1.0E-6d) {
                 continue;
@@ -209,8 +211,7 @@ public final class SquidIronFistHandler {
         if (living instanceof EnderDragonEntity || living instanceof WitherEntity) {
             return false;
         }
-        return living instanceof FlyingEntity
-                || living instanceof BeeEntity
+        return living instanceof BeeEntity
                 || living instanceof PhantomEntity
                 || living instanceof GhastEntity
                 || living instanceof VexEntity
@@ -218,17 +219,17 @@ public final class SquidIronFistHandler {
     }
 
     private static void launchInterceptor(ServerPlayerEntity owner, Entity target, int level, long nowTicks) {
-        ServerWorld world = owner.getServerWorld();
-        GlowSquidEntity squid = EntityType.GLOW_SQUID.create(world);
+        ServerWorld world = (ServerWorld) owner.getEntityWorld();
+        GlowSquidEntity squid = EntityType.GLOW_SQUID.create(world, net.minecraft.entity.SpawnReason.TRIGGERED);
         if (squid == null) {
             return;
         }
-        Vec3d launchDir = target.getPos().subtract(owner.getPos());
+        Vec3d launchDir = target.getEntityPos().subtract(owner.getEntityPos());
         if (launchDir.lengthSquared() < 1.0E-6d) {
             launchDir = owner.getRotationVec(1.0f);
         }
         launchDir = launchDir.normalize();
-        Vec3d spawnPos = owner.getPos().add(0.0d, owner.getStandingEyeHeight() * 0.6d, 0.0d).add(launchDir.multiply(0.6d));
+        Vec3d spawnPos = owner.getEntityPos().add(0.0d, owner.getStandingEyeHeight() * 0.6d, 0.0d).add(launchDir.multiply(0.6d));
 
         squid.refreshPositionAndAngles(spawnPos.x, spawnPos.y, spawnPos.z, owner.getYaw(), owner.getPitch());
         squid.setNoGravity(true);
@@ -297,7 +298,7 @@ public final class SquidIronFistHandler {
                 return true;
             }
 
-            Vec3d toTarget = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(squid.getPos());
+            Vec3d toTarget = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d).subtract(squid.getEntityPos());
             if (toTarget.lengthSquared() < INTERCEPT_DISTANCE * INTERCEPT_DISTANCE) {
                 explodeOnIntercept(world, squid, target, ownerEntity, state.level());
                 squid.discard();
@@ -314,11 +315,11 @@ public final class SquidIronFistHandler {
     }
 
     private static void explodeOnIntercept(ServerWorld world, GlowSquidEntity squid, Entity target, Entity ownerEntity, int level) {
-        Vec3d hitPos = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        Vec3d hitPos = target.getEntityPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
         world.createExplosion(ownerEntity, hitPos.x, hitPos.y, hitPos.z, 1.0f, false, World.ExplosionSourceType.MOB);
         world.spawnParticles(ParticleTypes.EXPLOSION, hitPos.x, hitPos.y, hitPos.z, 2, 0.15d, 0.15d, 0.15d, 0.01d);
 
-        Vec3d forward = target.getPos().subtract(squid.getPos());
+        Vec3d forward = target.getEntityPos().subtract(squid.getEntityPos());
         if (forward.lengthSquared() < 1.0E-6d) {
             forward = squid.getVelocity();
         }
@@ -342,9 +343,9 @@ public final class SquidIronFistHandler {
         if (target instanceof LivingEntity living) {
             float damage = 6.0f + level;
             if (ownerEntity instanceof LivingEntity ownerLiving) {
-                living.damage(ownerLiving.getDamageSources().mobAttack(ownerLiving), damage);
+                living.damage(world, ownerLiving.getDamageSources().mobAttack(ownerLiving), damage);
             } else {
-                living.damage(world.getDamageSources().generic(), damage);
+                living.damage(world, world.getDamageSources().generic(), damage);
             }
             Vec3d knock = forward.multiply(1.1d);
             living.addVelocity(knock.x, 0.35d + 0.08d * level, knock.z);
@@ -363,7 +364,8 @@ public final class SquidIronFistHandler {
     }
 
     private static boolean isOffCooldown(LivingEntity entity, long nowTicks) {
-        StatusEffectInstance cooldown = entity.getStatusEffect(AutoEnchantsMod.SQUID_IRON_FIST_COOLDOWN);
+        RegistryEntry<StatusEffect> cooldownEffect = getSquidIronFistCooldownEntry(entity);
+        StatusEffectInstance cooldown = cooldownEffect == null ? null : entity.getStatusEffect(cooldownEffect);
         if (cooldown != null && cooldown.getDuration() > 0) {
             COOLDOWN_UNTIL.put(entity.getUuid(), nowTicks + cooldown.getDuration());
             return false;
@@ -373,25 +375,29 @@ public final class SquidIronFistHandler {
     }
 
     private static void startCooldown(ServerPlayerEntity player, int level, long nowTicks) {
+        RegistryEntry<StatusEffect> cooldownEffect = getSquidIronFistCooldownEntry(player);
+        if (cooldownEffect == null) {
+            return;
+        }
         if (isZeroCooldownDebug(player)) {
             COOLDOWN_UNTIL.remove(player.getUuid());
-            player.removeStatusEffect(AutoEnchantsMod.SQUID_IRON_FIST_COOLDOWN);
+            player.removeStatusEffect(cooldownEffect);
             return;
         }
         int cooldownTicks = Math.max(40, 300 - (level - 1) * 40);
         COOLDOWN_UNTIL.put(player.getUuid(), nowTicks + cooldownTicks);
-        player.addStatusEffect(new net.minecraft.entity.effect.StatusEffectInstance(
-                AutoEnchantsMod.SQUID_IRON_FIST_COOLDOWN, cooldownTicks, 0, false, false, true
-        ));
+        player.addStatusEffect(new StatusEffectInstance(cooldownEffect, cooldownTicks, 0, false, false, true));
     }
 
     private static boolean isZeroCooldownDebug(ServerPlayerEntity player) {
         ItemStack helmet = player.getEquippedStack(EquipmentSlot.HEAD);
-        if (helmet.isEmpty() || EnchantmentHelper.getLevel(AutoEnchantsMod.SQUID_IRON_FIST, helmet) <= 0) {
+        if (helmet.isEmpty() || AutoEnchantsMod.getEnchantmentLevel(AutoEnchantsMod.SQUID_IRON_FIST, helmet) <= 0) {
             return false;
         }
-        NbtCompound nbt = helmet.getNbt();
-        return nbt != null && nbt.getBoolean(ZERO_CD_NBT_KEY);
+        Boolean zeroCooldown = helmet.get(DataComponentTypes.CUSTOM_DATA)
+                .copyNbt()
+                .getBoolean(ZERO_CD_NBT_KEY, false);
+        return Boolean.TRUE.equals(zeroCooldown);
     }
 
     private static boolean isThreatToVictim(LivingEntity attacker, LivingEntity victim) {
@@ -471,7 +477,7 @@ public final class SquidIronFistHandler {
                 living -> living.isAlive() && living != ownerEntity
         );
         for (LivingEntity victim : victims) {
-            Vec3d toVictim = victim.getPos().add(0.0d, victim.getHeight() * 0.5d, 0.0d).subtract(hitPos);
+            Vec3d toVictim = victim.getEntityPos().add(0.0d, victim.getHeight() * 0.5d, 0.0d).subtract(hitPos);
             double distance = toVictim.length();
             if (distance > range || distance < 1.0E-6d) {
                 continue;
@@ -485,9 +491,9 @@ public final class SquidIronFistHandler {
             }
             float splashDamage = 2.0f + level * 0.8f;
             if (ownerEntity instanceof LivingEntity ownerLiving) {
-                victim.damage(ownerLiving.getDamageSources().mobAttack(ownerLiving), splashDamage);
+                victim.damage(world, ownerLiving.getDamageSources().mobAttack(ownerLiving), splashDamage);
             } else {
-                victim.damage(world.getDamageSources().generic(), splashDamage);
+                victim.damage(world, world.getDamageSources().generic(), splashDamage);
             }
             Vec3d knock = dir.multiply(0.8d + 0.1d * level);
             victim.addVelocity(knock.x, 0.2d + 0.05d * level, knock.z);
@@ -522,8 +528,6 @@ public final class SquidIronFistHandler {
         float pitch = (float) (-(MathHelper.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z)) * (180.0d / Math.PI)));
         entity.setYaw(yaw);
         entity.setPitch(pitch);
-        entity.prevYaw = yaw;
-        entity.prevPitch = pitch;
     }
 
     private static void orientSquidTowardsDirection(GlowSquidEntity squid, Vec3d direction) {
@@ -533,12 +537,10 @@ public final class SquidIronFistHandler {
         // 鱿鱼模型的前向轴与常规生物不同，需要 -90 度补偿让头朝前
         squid.setYaw(yaw);
         squid.setPitch(pitch - 90.0f);
-        squid.prevYaw = yaw;
-        squid.prevPitch = pitch - 90.0f;
     }
 
     private static void applySquidScale(GlowSquidEntity squid, double scale) {
-        EntityAttribute attribute = resolveScaleAttribute();
+        RegistryEntry<EntityAttribute> attribute = resolveScaleAttribute();
         if (attribute == null) {
             return;
         }
@@ -548,26 +550,19 @@ public final class SquidIronFistHandler {
         }
     }
 
-    private static EntityAttribute resolveScaleAttribute() {
-        if (SCALE_ATTR_RESOLVED) {
-            return SQUID_SCALE_ATTRIBUTE;
-        }
-        SCALE_ATTR_RESOLVED = true;
-        try {
-            Field field = EntityAttributes.class.getField("GENERIC_SCALE");
-            Object value = field.get(null);
-            if (value instanceof EntityAttribute entityAttribute) {
-                SQUID_SCALE_ATTRIBUTE = entityAttribute;
-            }
-        } catch (ReflectiveOperationException ignored) {
-            SQUID_SCALE_ATTRIBUTE = null;
-        }
-        return SQUID_SCALE_ATTRIBUTE;
+    private static RegistryEntry<EntityAttribute> resolveScaleAttribute() {
+        return EntityAttributes.SCALE;
     }
 
     private static boolean isSquidStuckInBlock(ServerWorld world, GlowSquidEntity squid) {
         // 检查鱿鱼的碰撞箱是否与方块碰撞
         Box boundingBox = squid.getBoundingBox();
         return world.getBlockCollisions(squid, boundingBox).iterator().hasNext();
+    }
+
+    private static RegistryEntry<StatusEffect> getSquidIronFistCooldownEntry(LivingEntity entity) {
+        return entity.getRegistryManager()
+                .getOrThrow(RegistryKeys.STATUS_EFFECT)
+                .getEntry(AutoEnchantsMod.SQUID_IRON_FIST_COOLDOWN);
     }
 }

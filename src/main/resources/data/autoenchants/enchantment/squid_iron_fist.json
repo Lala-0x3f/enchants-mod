@@ -1,0 +1,22 @@
+{
+  "anvil_cost": 4,
+  "description": {
+    "translate": "enchantment.autoenchants.squid_iron_fist"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 42,
+    "per_level_above_first": 10
+  },
+  "max_level": 5,
+  "min_cost": {
+    "base": 18,
+    "per_level_above_first": 10
+  },
+  "primary_items": "#minecraft:enchantable/head_armor",
+  "slots": [
+    "head"
+  ],
+  "supported_items": "#minecraft:enchantable/head_armor",
+  "weight": 1
+}

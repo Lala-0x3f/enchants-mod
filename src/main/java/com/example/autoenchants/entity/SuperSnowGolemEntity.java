@@ -5,7 +5,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.mob.FlyingEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.SnowGolemEntity;
@@ -49,11 +48,11 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
     public void tick() {
         super.tick();
 
-        if (getWorld().isClient()) {
+        if (getEntityWorld().isClient()) {
             return;
         }
 
-        if ((age & 3) == 0 && getWorld() instanceof ServerWorld serverWorld) {
+        if ((age & 3) == 0 && getEntityWorld() instanceof ServerWorld serverWorld) {
             serverWorld.spawnParticles(ParticleTypes.ENCHANT, getX(), getBodyY(0.65d), getZ(), 5, 0.35d, 0.45d, 0.35d, 0.12d);
         }
 
@@ -86,15 +85,15 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
     }
 
     @Override
-    public boolean damage(DamageSource source, float amount) {
+    public boolean damage(ServerWorld world, DamageSource source, float amount) {
         if (source.getSource() instanceof SnowballEntity) {
             return false;
         }
-        return super.damage(source, amount);
+        return super.damage(world, source, amount);
     }
 
     private LivingEntity acquireBestTarget() {
-        List<LivingEntity> candidates = getWorld().getEntitiesByClass(
+        List<LivingEntity> candidates = getEntityWorld().getEntitiesByClass(
                 LivingEntity.class,
                 getBoundingBox().expand(ENGAGE_RANGE),
                 this::isValidHostileTarget
@@ -149,15 +148,14 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
     }
 
     private boolean isFlyingPriority(LivingEntity entity) {
-        return entity instanceof FlyingEntity
-                || entity instanceof EnderDragonEntity
+        return entity instanceof EnderDragonEntity
                 || entity instanceof WitherEntity
                 || !entity.isOnGround()
                 || Math.abs(entity.getVelocity().y) > 0.12d;
     }
 
     private void updateTrack(LivingEntity target) {
-        Vec3d measurement = target.getPos().add(0.0d, target.getStandingEyeHeight() * 0.45d, 0.0d);
+        Vec3d measurement = target.getEntityPos().add(0.0d, target.getStandingEyeHeight() * 0.45d, 0.0d);
         Vec3d measuredVelocity = target.getVelocity();
 
         if (filteredPos == null || filteredVel == null || trackedTargetId == null || !trackedTargetId.equals(target.getUuid())) {
@@ -340,7 +338,7 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
     }
 
     private void fireSnowball(Vec3d velocity, LivingEntity target) {
-        World world = getWorld();
+        World world = getEntityWorld();
         SuperGolemSnowballEntity snowball = new SuperGolemSnowballEntity(world, this);
         Vec3d muzzle = getEyePos().add(getRotationVec(1.0f).multiply(0.35d));
         snowball.refreshPositionAndAngles(muzzle.x, muzzle.y, muzzle.z, getYaw(), getPitch());

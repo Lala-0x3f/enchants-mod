@@ -1,0 +1,23 @@
+{
+  "anvil_cost": 3,
+  "description": {
+    "translate": "enchantment.autoenchants.guidance"
+  },
+  "effects": {},
+  "max_cost": {
+    "base": 42,
+    "per_level_above_first": 10
+  },
+  "max_level": 3,
+  "min_cost": {
+    "base": 18,
+    "per_level_above_first": 10
+  },
+  "primary_items": "#autoenchants:enchantable/guidance",
+  "slots": [
+    "mainhand",
+    "offhand"
+  ],
+  "supported_items": "#autoenchants:enchantable/guidance",
+  "weight": 2
+}

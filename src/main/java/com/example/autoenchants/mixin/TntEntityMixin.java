@@ -20,7 +20,8 @@ public abstract class TntEntityMixin {
     @Inject(method = "tick", at = @At("HEAD"))
     private void autoenchants$explodeOnBlockHit(CallbackInfo ci) {
         Entity self = (Entity) (Object) this;
-        if (!self.getCommandTags().contains(BLAST_LAUNCHED_TNT_TAG) || self.getWorld().isClient()) {
+        World world = self.getEntityWorld();
+        if (!self.getCommandTags().contains(BLAST_LAUNCHED_TNT_TAG) || world.isClient()) {
             return;
         }
 
@@ -29,7 +30,6 @@ public abstract class TntEntityMixin {
             return;
         }
 
-        World world = self.getWorld();
         world.createExplosion(self, self.getX(), self.getY(), self.getZ(), 4.0f, true, World.ExplosionSourceType.TNT);
         self.removeCommandTag(BLAST_LAUNCHED_TNT_TAG);
         self.discard();
@@ -42,12 +42,12 @@ public abstract class TntEntityMixin {
             return false;
         }
         Box nextBox = self.getBoundingBox().stretch(velocity).expand(0.05d);
-        return self.getWorld().getBlockCollisions(self, nextBox).iterator().hasNext();
+        return self.getEntityWorld().getBlockCollisions(self, nextBox).iterator().hasNext();
     }
 
     @Unique
     private static void autoenchants$spawnFlightFlame(Entity self) {
-        if (!(self.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(self.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
         serverWorld.spawnParticles(ParticleTypes.FLAME, self.getX(), self.getY() + 0.1d, self.getZ(), 2, 0.08d, 0.08d, 0.08d, 0.001d);

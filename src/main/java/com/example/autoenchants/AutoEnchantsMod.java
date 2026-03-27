@@ -1,24 +1,5 @@
 package com.example.autoenchants;
 
-import com.example.autoenchants.enchant.AutomaticEnchantment;
-import com.example.autoenchants.enchant.BlastFireworkEnchantment;
-import com.example.autoenchants.enchant.CriticalFangsEnchantment;
-import com.example.autoenchants.enchant.ExplosiveTridentEnchantment;
-import com.example.autoenchants.enchant.FireworkCreeperEnchantment;
-import com.example.autoenchants.enchant.FireworkGolemEnchantment;
-import com.example.autoenchants.enchant.FireworkShulkerEnchantment;
-import com.example.autoenchants.enchant.FireworkVexEnchantment;
-import com.example.autoenchants.enchant.GuidanceEnchantment;
-import com.example.autoenchants.enchant.PreciseShooterEnchantment;
-import com.example.autoenchants.enchant.PrecisionGuidanceEnchantment;
-import com.example.autoenchants.enchant.ReactionArmorEnchantment;
-import com.example.autoenchants.enchant.RequiemEnchantment;
-import com.example.autoenchants.enchant.SkyBombardEnchantment;
-import com.example.autoenchants.enchant.RetroBootsEnchantment;
-import com.example.autoenchants.enchant.StrangeWandEnchantment;
-import com.example.autoenchants.enchant.SquidIronFistEnchantment;
-import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
-import com.example.autoenchants.enchant.TripleBurstEnchantment;
 import com.example.autoenchants.entity.PeekabooShellEntity;
 import com.example.autoenchants.entity.PeekabooSparkEntity;
 import com.example.autoenchants.entity.SuperGolemSnowballEntity;
@@ -40,10 +21,12 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.EnchantmentLevelEntry;
 import net.minecraft.enchantment.Enchantment;
+import net.minecraft.component.type.ItemEnchantmentsComponent;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.mob.EvokerFangsEntity;
@@ -51,7 +34,6 @@ import net.minecraft.entity.passive.SnowGolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
 import net.minecraft.item.CompassItem;
-import net.minecraft.item.EnchantedBookItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroup;
 import net.minecraft.item.ItemStack;
@@ -60,12 +42,15 @@ import net.minecraft.item.SpawnEggItem;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryWrapper;
+import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.TypedActionResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
@@ -75,25 +60,30 @@ import net.minecraft.world.World;
 public class AutoEnchantsMod implements ModInitializer {
     public static final String MOD_ID = "autoenchants";
 
-    public static Enchantment PRECISE_SHOOTER;
-    public static Enchantment AUTOMATIC;
-    public static Enchantment TRIPLE_BURST;
-    public static Enchantment BLAST_FIREWORK;
-    public static Enchantment FIREWORK_SHULKER;
-    public static Enchantment FIREWORK_GOLEM;
-    public static Enchantment FIREWORK_CREEPER;
-    public static Enchantment FIREWORK_VEX;
-    public static Enchantment CRITICAL_FANGS;
-    public static Enchantment THERMAL_HELMET;
-    public static Enchantment REQUIEM;
-    public static Enchantment SKY_BOMBARD;
-    public static Enchantment GUIDANCE;
-    public static Enchantment PRECISE_GUIDANCE;
-    public static Enchantment REACTION_ARMOR;
-    public static Enchantment SQUID_IRON_FIST;
-    public static Enchantment STRANGE_WAND;
-    public static Enchantment RETRO_BOOTS;
-    public static Enchantment EXPLOSIVE_TRIDENT;
+    public static final RegistryKey<Enchantment> PRECISE_SHOOTER = enchantmentKey("precise_shooter");
+    public static final RegistryKey<Enchantment> AUTOMATIC = enchantmentKey("automatic");
+    public static final RegistryKey<Enchantment> TRIPLE_BURST = enchantmentKey("triple_burst");
+    public static final RegistryKey<Enchantment> BLAST_FIREWORK = enchantmentKey("blast_firework");
+    public static final RegistryKey<Enchantment> FIREWORK_SHULKER = enchantmentKey("firework_shulker");
+    public static final RegistryKey<Enchantment> FIREWORK_GOLEM = enchantmentKey("firework_golem");
+    public static final RegistryKey<Enchantment> FIREWORK_CREEPER = enchantmentKey("firework_creeper");
+    public static final RegistryKey<Enchantment> FIREWORK_VEX = enchantmentKey("firework_vex");
+    public static final RegistryKey<Enchantment> CRITICAL_FANGS = enchantmentKey("critical_fangs");
+    public static final RegistryKey<Enchantment> THERMAL_HELMET = enchantmentKey("thermal_helmet");
+    public static final RegistryKey<Enchantment> REQUIEM = enchantmentKey("requiem");
+    public static final RegistryKey<Enchantment> SKY_BOMBARD = enchantmentKey("sky_bombard");
+    public static final RegistryKey<Enchantment> GUIDANCE = enchantmentKey("guidance");
+    public static final RegistryKey<Enchantment> PRECISE_GUIDANCE = enchantmentKey("precise_guidance");
+    public static final RegistryKey<Enchantment> REACTION_ARMOR = enchantmentKey("reaction_armor");
+    public static final RegistryKey<Enchantment> SQUID_IRON_FIST = enchantmentKey("squid_iron_fist");
+    public static final RegistryKey<Enchantment> STRANGE_WAND = enchantmentKey("strange_wand");
+    public static final RegistryKey<Enchantment> RETRO_BOOTS = enchantmentKey("retro_boots");
+    public static final RegistryKey<Enchantment> EXPLOSIVE_TRIDENT = enchantmentKey("explosive_trident");
+    private static final RegistryKey<EntityType<?>> PEEKABOO_SHELL_KEY = entityTypeKey("peekaboo_shell");
+    private static final RegistryKey<EntityType<?>> SQUID_MISSILE_KEY = entityTypeKey("squid_missile");
+    private static final RegistryKey<EntityType<?>> PEEKABOO_SPARK_KEY = entityTypeKey("peekaboo_spark");
+    private static final RegistryKey<EntityType<?>> SUPER_GOLEM_SNOWBALL_KEY = entityTypeKey("super_golem_snowball");
+    private static final RegistryKey<EntityType<?>> SUPER_SNOW_GOLEM_KEY = entityTypeKey("super_snow_golem");
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
@@ -116,7 +106,7 @@ public class AutoEnchantsMod implements ModInitializer {
                 FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, PeekabooShellEntity::new)
                         .dimensions(EntityDimensions.fixed(1.0f, 1.0f))
                         .trackRangeBlocks(80)
-                        .build()
+                        .build(PEEKABOO_SHELL_KEY)
         );
         FabricDefaultAttributeRegistry.register(PEEKABOO_SHELL, PeekabooShellEntity.createShulkerAttributes());
 
@@ -127,7 +117,7 @@ public class AutoEnchantsMod implements ModInitializer {
                         .dimensions(EntityDimensions.fixed(0.8f, 0.8f))
                         .trackRangeBlocks(80)
                         .trackedUpdateRate(2)
-                        .build()
+                        .build(SQUID_MISSILE_KEY)
         );
         FabricDefaultAttributeRegistry.register(SQUID_MISSILE, SquidMissileEntity.createMissileAttributes());
 
@@ -138,7 +128,7 @@ public class AutoEnchantsMod implements ModInitializer {
                         .dimensions(EntityDimensions.fixed(0.3125f, 0.3125f))
                         .trackRangeBlocks(80)
                         .trackedUpdateRate(2)
-                        .build()
+                        .build(PEEKABOO_SPARK_KEY)
         );
 
         SUPER_GOLEM_SNOWBALL = Registry.register(
@@ -148,7 +138,7 @@ public class AutoEnchantsMod implements ModInitializer {
                         .dimensions(EntityDimensions.fixed(0.25f, 0.25f))
                         .trackRangeBlocks(64)
                         .trackedUpdateRate(10)
-                        .build()
+                        .build(SUPER_GOLEM_SNOWBALL_KEY)
         );
 
         SUPER_SNOW_GOLEM = Registry.register(
@@ -157,123 +147,9 @@ public class AutoEnchantsMod implements ModInitializer {
                 FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, SuperSnowGolemEntity::new)
                         .dimensions(EntityDimensions.fixed(0.7f, 1.9f))
                         .trackRangeBlocks(80)
-                        .build()
+                        .build(SUPER_SNOW_GOLEM_KEY)
         );
         FabricDefaultAttributeRegistry.register(SUPER_SNOW_GOLEM, SnowGolemEntity.createSnowGolemAttributes());
-
-        PRECISE_SHOOTER = Registry.register(
-                Registries.ENCHANTMENT,
-                id("precise_shooter"),
-                new PreciseShooterEnchantment()
-        );
-
-        AUTOMATIC = Registry.register(
-                Registries.ENCHANTMENT,
-                id("automatic"),
-                new AutomaticEnchantment()
-        );
-
-        TRIPLE_BURST = Registry.register(
-                Registries.ENCHANTMENT,
-                id("triple_burst"),
-                new TripleBurstEnchantment()
-        );
-
-        BLAST_FIREWORK = Registry.register(
-                Registries.ENCHANTMENT,
-                id("blast_firework"),
-                new BlastFireworkEnchantment()
-        );
-
-        FIREWORK_SHULKER = Registry.register(
-                Registries.ENCHANTMENT,
-                id("firework_shulker"),
-                new FireworkShulkerEnchantment()
-        );
-
-        FIREWORK_GOLEM = Registry.register(
-                Registries.ENCHANTMENT,
-                id("firework_golem"),
-                new FireworkGolemEnchantment()
-        );
-
-        FIREWORK_CREEPER = Registry.register(
-                Registries.ENCHANTMENT,
-                id("firework_creeper"),
-                new FireworkCreeperEnchantment()
-        );
-
-        FIREWORK_VEX = Registry.register(
-                Registries.ENCHANTMENT,
-                id("firework_vex"),
-                new FireworkVexEnchantment()
-        );
-
-        CRITICAL_FANGS = Registry.register(
-                Registries.ENCHANTMENT,
-                id("critical_fangs"),
-                new CriticalFangsEnchantment()
-        );
-
-        THERMAL_HELMET = Registry.register(
-                Registries.ENCHANTMENT,
-                id("thermal_helmet"),
-                new ThermalHelmetEnchantment()
-        );
-
-        REQUIEM = Registry.register(
-                Registries.ENCHANTMENT,
-                id("requiem"),
-                new RequiemEnchantment()
-        );
-
-        SKY_BOMBARD = Registry.register(
-                Registries.ENCHANTMENT,
-                id("sky_bombard"),
-                new SkyBombardEnchantment()
-        );
-
-        GUIDANCE = Registry.register(
-                Registries.ENCHANTMENT,
-                id("guidance"),
-                new GuidanceEnchantment()
-        );
-
-        PRECISE_GUIDANCE = Registry.register(
-                Registries.ENCHANTMENT,
-                id("precise_guidance"),
-                new PrecisionGuidanceEnchantment()
-        );
-
-        REACTION_ARMOR = Registry.register(
-                Registries.ENCHANTMENT,
-                id("reaction_armor"),
-                new ReactionArmorEnchantment()
-        );
-
-        SQUID_IRON_FIST = Registry.register(
-                Registries.ENCHANTMENT,
-                id("squid_iron_fist"),
-                new SquidIronFistEnchantment()
-        );
-
-        STRANGE_WAND = Registry.register(
-                Registries.ENCHANTMENT,
-                id("strange_wand"),
-                new StrangeWandEnchantment()
-        );
-
-        RETRO_BOOTS = Registry.register(
-                Registries.ENCHANTMENT,
-                id("retro_boots"),
-                new RetroBootsEnchantment()
-        );
-
-        EXPLOSIVE_TRIDENT = Registry.register(
-                Registries.ENCHANTMENT,
-                id("explosive_trident"),
-                new ExplosiveTridentEnchantment()
-        );
 
         TARGET_POINTER = Registry.register(
                 Registries.ITEM,
@@ -284,7 +160,7 @@ public class AutoEnchantsMod implements ModInitializer {
         PEEKABOO_SHELL_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("peekaboo_shell_spawn_egg"),
-                new SpawnEggItem(PEEKABOO_SHELL, 0x946794, 0x4C3A4C, new Item.Settings())
+                new SpawnEggItem(new Item.Settings().spawnEgg(PEEKABOO_SHELL))
         );
 
         SQUID_MISSILE_ITEM = Registry.register(
@@ -296,7 +172,7 @@ public class AutoEnchantsMod implements ModInitializer {
         SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("super_snow_golem_spawn_egg"),
-                new SpawnEggItem(SUPER_SNOW_GOLEM, 0xBFD7FF, 0x4F5F6E, new Item.Settings())
+                new SpawnEggItem(new Item.Settings().spawnEgg(SUPER_SNOW_GOLEM))
         );
 
         Registry.register(Registries.ITEM_GROUP, id("main"),
@@ -308,7 +184,7 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(SQUID_MISSILE_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
-                            addEnchantedBooks(entries);
+                            addEnchantedBooks(context.lookup(), entries);
                         })
                         .build()
         );
@@ -347,13 +223,13 @@ public class AutoEnchantsMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(RetroBootsHandler::tick);
         UseItemCallback.EVENT.register((player, world, hand) -> {
             ItemStack stack = player.getStackInHand(hand);
-            if (world.isClient || !(stack.getItem() instanceof CrossbowItem)) {
-                return TypedActionResult.pass(stack);
+            if (world.isClient() || !(stack.getItem() instanceof CrossbowItem)) {
+                return ActionResult.PASS;
             }
             if (AutoFireHandler.startTripleBurst(player, hand, stack)) {
-                return TypedActionResult.success(stack);
+                return ActionResult.SUCCESS;
             }
-            return TypedActionResult.pass(stack);
+            return ActionResult.PASS;
         });
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
             if (world.isClient() || !(entity instanceof LivingEntity target)) {
@@ -387,11 +263,38 @@ public class AutoEnchantsMod implements ModInitializer {
     }
 
     public static Identifier id(String path) {
-        return new Identifier(MOD_ID, path);
+        return Identifier.of(MOD_ID, path);
     }
 
-    private static void addEnchantedBooks(ItemGroup.Entries entries) {
-        Enchantment[] enchantments = {
+    public static int getEnchantmentLevel(RegistryKey<Enchantment> enchantmentKey, ItemStack stack) {
+        ItemEnchantmentsComponent enchantments = EnchantmentHelper.getEnchantments(stack);
+        for (var entry : enchantments.getEnchantmentEntries()) {
+            if (entry.getKey().matchesKey(enchantmentKey)) {
+                return entry.getIntValue();
+            }
+        }
+        return 0;
+    }
+
+    public static int getEquipmentEnchantmentLevel(RegistryKey<Enchantment> enchantmentKey, LivingEntity entity) {
+        int level = 0;
+        for (EquipmentSlot slot : EquipmentSlot.VALUES) {
+            if (!slot.isArmorSlot()) {
+                continue;
+            }
+            level = Math.max(level, getEnchantmentLevel(enchantmentKey, entity.getEquippedStack(slot)));
+        }
+        level = Math.max(level, getEnchantmentLevel(enchantmentKey, entity.getMainHandStack()));
+        level = Math.max(level, getEnchantmentLevel(enchantmentKey, entity.getOffHandStack()));
+        return level;
+    }
+
+    private static RegistryEntry.Reference<Enchantment> getEnchantmentEntry(RegistryWrapper.WrapperLookup lookup, RegistryKey<Enchantment> enchantmentKey) {
+        return lookup.getOrThrow(RegistryKeys.ENCHANTMENT).getOrThrow(enchantmentKey);
+    }
+
+    private static void addEnchantedBooks(RegistryWrapper.WrapperLookup lookup, ItemGroup.Entries entries) {
+        RegistryKey<Enchantment>[] enchantments = new RegistryKey[]{
                 PRECISE_SHOOTER, AUTOMATIC, TRIPLE_BURST,
                 BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER, FIREWORK_VEX,
                 PRECISE_GUIDANCE,
@@ -399,18 +302,17 @@ public class AutoEnchantsMod implements ModInitializer {
                 THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
                 GUIDANCE, REQUIEM, STRANGE_WAND, RETRO_BOOTS
         };
-        for (Enchantment ench : enchantments) {
-            for (int lvl = 1; lvl <= ench.getMaxLevel(); lvl++) {
-                ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-                EnchantedBookItem.addEnchantment(book, new EnchantmentLevelEntry(ench, lvl));
-                entries.add(book);
+        for (RegistryKey<Enchantment> enchantmentKey : enchantments) {
+            RegistryEntry.Reference<Enchantment> entry = getEnchantmentEntry(lookup, enchantmentKey);
+            for (int level = 1; level <= entry.value().getMaxLevel(); level++) {
+                entries.add(EnchantmentHelper.getEnchantedBookWith(new EnchantmentLevelEntry(entry, level)));
             }
         }
     }
 
     private static void autoenchants$trySpawnCriticalFangs(PlayerEntity player, LivingEntity target) {
         ItemStack weapon = player.getMainHandStack();
-        int level = EnchantmentHelper.getLevel(CRITICAL_FANGS, weapon);
+        int level = getEnchantmentLevel(CRITICAL_FANGS, weapon);
         if (level <= 0) {
             return;
         }
@@ -418,7 +320,7 @@ public class AutoEnchantsMod implements ModInitializer {
             return;
         }
 
-        World world = player.getWorld();
+        World world = player.getEntityWorld();
         Vec3d facing = player.getRotationVec(1.0f);
         Vec3d horizontal = new Vec3d(facing.x, 0.0d, facing.z);
         if (horizontal.lengthSquared() < 1.0E-4d) {
@@ -462,7 +364,7 @@ public class AutoEnchantsMod implements ModInitializer {
         if (target.isOnGround()) {
             return true;
         }
-        World world = target.getWorld();
+        World world = target.getEntityWorld();
         BlockPos basePos = target.getBlockPos();
         for (int i = 1; i <= 2; i++) {
             BlockPos checkPos = basePos.down(i);
@@ -486,5 +388,13 @@ public class AutoEnchantsMod implements ModInitializer {
             pos.move(Direction.DOWN);
         }
         return Double.NaN;
+    }
+
+    private static RegistryKey<Enchantment> enchantmentKey(String path) {
+        return RegistryKey.of(RegistryKeys.ENCHANTMENT, id(path));
+    }
+
+    private static RegistryKey<EntityType<?>> entityTypeKey(String path) {
+        return RegistryKey.of(RegistryKeys.ENTITY_TYPE, id(path));
     }
 }

@@ -39,7 +39,7 @@ public abstract class ShulkerBulletEntityMixin {
 
     private void autoenchants$spawnGlowParticles() {
         Entity self = (Entity) (Object) this;
-        if (!(self.getWorld() instanceof ServerWorld serverWorld)) {
+        if (!(self.getEntityWorld() instanceof ServerWorld serverWorld)) {
             return;
         }
         if (!self.getCommandTags().contains(SHULKER_BULLET_FX_TAG)) {
@@ -47,7 +47,7 @@ public abstract class ShulkerBulletEntityMixin {
         }
 
         serverWorld.spawnParticles(ParticleTypes.WAX_OFF, self.getX(), self.getY() + 0.2d, self.getZ(), 24, 0.35d, 0.35d, 0.35d, 0.02d);
-        serverWorld.spawnParticles(ParticleTypes.INSTANT_EFFECT, self.getX(), self.getY() + 0.2d, self.getZ(), 18, 0.3d, 0.3d, 0.3d, 0.02d);
+        serverWorld.spawnParticles(ParticleTypes.WITCH, self.getX(), self.getY() + 0.2d, self.getZ(), 18, 0.3d, 0.3d, 0.3d, 0.02d);
         self.removeCommandTag(SHULKER_BULLET_FX_TAG);
     }
 }
