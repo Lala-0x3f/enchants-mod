@@ -71,7 +71,20 @@ public final class LockedOnHandler {
 
     public static boolean isLockedOn(LivingEntity entity) {
         LockedState state = LOCKED_STATES.get(entity.getUuid());
-        return state != null;
+        if (state == null) {
+            return false;
+        }
+        if (!(entity.getEntityWorld() instanceof ServerWorld serverWorld)) {
+            return false;
+        }
+        if (state.worldKey() != serverWorld.getRegistryKey()) {
+            return false;
+        }
+        if (serverWorld.getServer().getTicks() > state.expireTick()) {
+            LOCKED_STATES.remove(entity.getUuid());
+            return false;
+        }
+        return entity.isAlive();
     }
 
     public static LivingEntity findNearestLockedTarget(ServerWorld world, Vec3d origin, double range) {

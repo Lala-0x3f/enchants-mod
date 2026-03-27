@@ -3,6 +3,7 @@ package com.example.autoenchants.entity;
 import com.example.autoenchants.AutoEnchantsMod;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.FlyingItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.data.DataTracker;
 import net.minecraft.entity.damage.DamageSource;
@@ -35,7 +36,7 @@ import org.jetbrains.annotations.Nullable;
  * A homing spark projectile fired by PeekabooShellEntity.
  * Unlike ShulkerBulletEntity, this moves freely in 3D space with smooth homing.
  */
-public class PeekabooSparkEntity extends ProjectileEntity {
+public class PeekabooSparkEntity extends ProjectileEntity implements net.minecraft.entity.FlyingItemEntity {
     private static final double SPEED = 0.65d;
     private static final double TURN_RATE = 0.12d;
     private static final int MAX_LIFETIME_TICKS = 160;
@@ -223,5 +224,10 @@ public class PeekabooSparkEntity extends ProjectileEntity {
     @Override
     public boolean shouldRender(double distance) {
         return distance < 16384.0d;
+    }
+
+    @Override
+    public net.minecraft.item.ItemStack getStack() {
+        return net.minecraft.item.ItemStack.EMPTY;
     }
 }
