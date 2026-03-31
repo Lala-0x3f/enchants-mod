@@ -1,5 +1,6 @@
 package com.example.autoenchants;
 
+import com.example.autoenchants.enchant.AirburstTridentEnchantment;
 import com.example.autoenchants.enchant.AutomaticEnchantment;
 import com.example.autoenchants.enchant.BlastFireworkEnchantment;
 import com.example.autoenchants.enchant.CriticalFangsEnchantment;
@@ -94,6 +95,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment STRANGE_WAND;
     public static Enchantment RETRO_BOOTS;
     public static Enchantment EXPLOSIVE_TRIDENT;
+    public static Enchantment AIRBURST_TRIDENT;
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
@@ -275,6 +277,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new ExplosiveTridentEnchantment()
         );
 
+        AIRBURST_TRIDENT = Registry.register(
+                Registries.ENCHANTMENT,
+                id("airburst_trident"),
+                new AirburstTridentEnchantment()
+        );
+
         TARGET_POINTER = Registry.register(
                 Registries.ITEM,
                 id("target_pointer"),
@@ -395,7 +403,7 @@ public class AutoEnchantsMod implements ModInitializer {
                 PRECISE_SHOOTER, AUTOMATIC, TRIPLE_BURST,
                 BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER, FIREWORK_VEX,
                 PRECISE_GUIDANCE,
-                CRITICAL_FANGS, SKY_BOMBARD, EXPLOSIVE_TRIDENT,
+                CRITICAL_FANGS, SKY_BOMBARD, EXPLOSIVE_TRIDENT, AIRBURST_TRIDENT,
                 THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
                 GUIDANCE, REQUIEM, STRANGE_WAND, RETRO_BOOTS
         };
