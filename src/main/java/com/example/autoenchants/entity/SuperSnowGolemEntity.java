@@ -1,5 +1,6 @@
 package com.example.autoenchants.entity;
 
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.WitherEntity;
@@ -9,15 +10,21 @@ import net.minecraft.entity.mob.FlyingEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.SnowGolemEntity;
+import net.minecraft.entity.projectile.DragonFireballEntity;
+import net.minecraft.entity.projectile.ExplosiveProjectileEntity;
+import net.minecraft.entity.projectile.ProjectileEntity;
+import net.minecraft.entity.projectile.WitherSkullEntity;
 import net.minecraft.entity.projectile.thrown.SnowballEntity;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,6 +36,10 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
     private static final double SNOWBALL_DRAG = 0.99d;
     private static final int FIRE_INTERVAL_TICKS = 1;
     private static final int MAX_SOLVE_TICKS = 140;
+    private static final double INTERCEPT_PROJECTILE_RANGE = 128.0d;
+    private static final double INTERCEPT_PROJECTILE_RANGE_SQ = INTERCEPT_PROJECTILE_RANGE * INTERCEPT_PROJECTILE_RANGE;
+    private static final double INTERCEPT_LOOKAHEAD_TICKS = 20.0d;
+    private static final double INTERCEPT_CLOSE_RADIUS = 5.5d;
 
     private int fireCooldown;
     private UUID trackedTargetId;
@@ -57,6 +68,23 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
             serverWorld.spawnParticles(ParticleTypes.ENCHANT, getX(), getBodyY(0.65d), getZ(), 5, 0.35d, 0.45d, 0.35d, 0.12d);
         }
 
+        if (fireCooldown > 0) {
+            fireCooldown--;
+        }
+
+        ProjectileEntity interceptProjectile = acquireInterceptProjectile();
+        if (interceptProjectile != null) {
+            aimAt(interceptProjectile);
+            if (fireCooldown <= 0) {
+                Vec3d launchVelocity = solveProjectileInterceptVelocity(interceptProjectile);
+                if (launchVelocity != null) {
+                    fireSnowball(launchVelocity, interceptProjectile);
+                    fireCooldown = FIRE_INTERVAL_TICKS;
+                }
+            }
+            return;
+        }
+
         LivingEntity target = acquireBestTarget();
         if (target == null) {
             clearTrack();
@@ -67,7 +95,6 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
         aimAt(target);
 
         if (fireCooldown > 0) {
-            fireCooldown--;
             return;
         }
 
@@ -196,9 +223,50 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
         setTarget(null);
     }
 
-    private void aimAt(LivingEntity target) {
-        setTarget(target);
-        Vec3d look = target.getEyePos().subtract(getEyePos());
+    private ProjectileEntity acquireInterceptProjectile() {
+        Box searchBox = getBoundingBox().expand(INTERCEPT_PROJECTILE_RANGE);
+        return getWorld().getEntitiesByClass(
+                        ProjectileEntity.class,
+                        searchBox,
+                        this::isInterceptCandidate
+                ).stream()
+                .min(Comparator.comparingDouble(this::scoreInterceptProjectile))
+                .orElse(null);
+    }
+
+    private boolean isInterceptCandidate(ProjectileEntity projectile) {
+        if (!projectile.isAlive() || projectile.isRemoved() || projectile.getOwner() == this) {
+            return false;
+        }
+        if (!(projectile instanceof DragonFireballEntity) && !(projectile instanceof WitherSkullEntity)) {
+            return false;
+        }
+        if (squaredDistanceTo(projectile) > INTERCEPT_PROJECTILE_RANGE_SQ) {
+            return false;
+        }
+        Vec3d futurePos = projectile.getPos().add(projectile.getVelocity().multiply(INTERCEPT_LOOKAHEAD_TICKS));
+        double futureDistSq = squaredDistanceTo(futurePos);
+        if (futureDistSq > INTERCEPT_PROJECTILE_RANGE_SQ) {
+            return false;
+        }
+        return futureDistSq < squaredDistanceTo(projectile) || futureDistSq < INTERCEPT_CLOSE_RADIUS * INTERCEPT_CLOSE_RADIUS;
+    }
+
+    private double scoreInterceptProjectile(ProjectileEntity projectile) {
+        Vec3d futurePos = projectile.getPos().add(projectile.getVelocity().multiply(INTERCEPT_LOOKAHEAD_TICKS));
+        double futureDistSq = squaredDistanceTo(futurePos);
+        double currentDistSq = squaredDistanceTo(projectile);
+        return futureDistSq * 0.7d + currentDistSq * 0.3d;
+    }
+
+    private void aimAt(Entity target) {
+        if (target instanceof LivingEntity livingTarget) {
+            setTarget(livingTarget);
+        } else {
+            setTarget(null);
+        }
+        Vec3d aimPoint = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        Vec3d look = aimPoint.subtract(getEyePos());
         double horizontal = Math.sqrt(look.x * look.x + look.z * look.z);
         float yaw = (float) (MathHelper.atan2(look.z, look.x) * (180.0d / Math.PI)) - 90.0f;
         float pitch = (float) (-(MathHelper.atan2(look.y, horizontal) * (180.0d / Math.PI)));
@@ -339,7 +407,32 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
         return pos;
     }
 
-    private void fireSnowball(Vec3d velocity, LivingEntity target) {
+    private Vec3d solveProjectileInterceptVelocity(ProjectileEntity projectile) {
+        Vec3d muzzlePos = getEyePos();
+        Vec3d projectilePos = projectile.getPos().add(0.0d, projectile.getHeight() * 0.5d, 0.0d);
+        Vec3d projectileVelocity = projectile.getVelocity();
+        double tof = MathHelper.clamp(muzzlePos.distanceTo(projectilePos) / PROJECTILE_SPEED, 1.0d, INTERCEPT_LOOKAHEAD_TICKS);
+
+        for (int i = 0; i < 6; i++) {
+            Vec3d predictedTarget = projectilePos.add(projectileVelocity.multiply(tof));
+            BallisticSolution solution = solveBallisticToPoint(muzzlePos, predictedTarget, PROJECTILE_SPEED, SNOWBALL_GRAVITY);
+            if (solution == null) {
+                return null;
+            }
+            if (Math.abs(solution.time - tof) < 0.35d) {
+                return solution.velocity;
+            }
+            tof = MathHelper.clamp(MathHelper.lerp(0.5d, tof, solution.time), 1.0d, INTERCEPT_LOOKAHEAD_TICKS);
+        }
+
+        Vec3d fallbackAim = projectilePos.add(projectileVelocity.multiply(tof)).subtract(muzzlePos);
+        if (fallbackAim.lengthSquared() < 1.0E-6d) {
+            return null;
+        }
+        return fallbackAim.normalize().multiply(PROJECTILE_SPEED);
+    }
+
+    private void fireSnowball(Vec3d velocity, Entity target) {
         World world = getWorld();
         SuperGolemSnowballEntity snowball = new SuperGolemSnowballEntity(world, this);
         Vec3d muzzle = getEyePos().add(getRotationVec(1.0f).multiply(0.35d));
@@ -350,7 +443,7 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
 
         if (world instanceof ServerWorld serverWorld) {
             serverWorld.spawnParticles(ParticleTypes.SNOWFLAKE, muzzle.x, muzzle.y, muzzle.z, 3, 0.06d, 0.06d, 0.06d, 0.02d);
-            serverWorld.spawnParticles(ParticleTypes.CRIT, target.getX(), target.getBodyY(0.75d), target.getZ(), 1, 0.02d, 0.02d, 0.02d, 0.0d);
+            serverWorld.spawnParticles(ParticleTypes.CRIT, target.getX(), target.getY() + target.getHeight() * 0.75d, target.getZ(), 1, 0.02d, 0.02d, 0.02d, 0.0d);
         }
 
         world.playSound(null, getX(), getY(), getZ(), SoundEvents.ENTITY_SNOW_GOLEM_SHOOT, SoundCategory.HOSTILE, 0.8f, 0.95f + random.nextFloat() * 0.1f);
