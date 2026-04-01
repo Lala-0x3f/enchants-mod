@@ -13,6 +13,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.projectile.PersistentProjectileEntity;
 import net.minecraft.entity.projectile.TridentEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
@@ -55,6 +56,8 @@ public abstract class TridentEntityMixin {
     private boolean autoenchants$hasHitEntity = false;
     @Unique
     private boolean autoenchants$airburstTriggered = false;
+    @Unique
+    private UUID autoenchants$airburstTarget;
 
     @Inject(method = "tick", at = @At("HEAD"))
     private void autoenchants$onTick(CallbackInfo ci) {
@@ -74,13 +77,21 @@ public abstract class TridentEntityMixin {
         TridentEntity self = (TridentEntity) (Object) this;
         World world = self.getWorld();
         autoenchants$lockedTarget = null;
+        autoenchants$airburstTarget = null;
         autoenchants$bombardComplete = true;
-        autoenchants$airburstTriggered = true;
         if (world.isClient()) {
             return;
         }
 
         ItemStack stack = self.getItemStack();
+        int airburstLevel = EnchantmentHelper.getLevel(AutoEnchantsMod.AIRBURST_TRIDENT, stack);
+        if (airburstLevel > 0 && autoenchants$shouldTriggerAirburstOnEntityHit(self, hitResult.getEntity())) {
+            autoenchants$airburstTriggered = true;
+            autoenchants$triggerAirburst(self, airburstLevel, self.getPos());
+            return;
+        }
+
+        autoenchants$airburstTriggered = true;
         int level = EnchantmentHelper.getLevel(AutoEnchantsMod.SKY_BOMBARD, stack);
         if (level > 0) {
             Entity ownerEntity = self.getOwner();
@@ -237,32 +248,32 @@ public abstract class TridentEntityMixin {
             return;
         }
 
-        BlockHitResult groundHit = autoenchants$findGroundAhead(self);
-        if (groundHit == null) {
+        LivingEntity target = autoenchants$getOrAcquireAirburstTarget(self, level);
+        if (target == null) {
             return;
         }
 
-        double distanceToGround = self.getPos().distanceTo(groundHit.getPos());
-        double triggerHeight = AIRBURST_TRIGGER_HEIGHT + level * 0.75d;
-        if (distanceToGround > triggerHeight) {
+        Vec3d burstPos = autoenchants$getAirburstBurstPos(self, target, level);
+        double triggerDistance = AIRBURST_TRIGGER_HEIGHT + level * 0.75d;
+        if (self.getPos().squaredDistanceTo(burstPos) > triggerDistance * triggerDistance) {
             return;
         }
 
         autoenchants$airburstTriggered = true;
         autoenchants$lockedTarget = null;
+        autoenchants$airburstTarget = null;
         autoenchants$bombardComplete = true;
-        autoenchants$triggerAirburst(self, level, groundHit);
+        autoenchants$triggerAirburst(self, level, burstPos);
     }
 
     @Unique
-    private void autoenchants$triggerAirburst(TridentEntity self, int level, BlockHitResult groundHit) {
+    private void autoenchants$triggerAirburst(TridentEntity self, int level, Vec3d burstPos) {
         World world = self.getWorld();
         Entity ownerEntity = self.getOwner();
         if (!(world instanceof ServerWorld serverWorld) || !(ownerEntity instanceof LivingEntity owner)) {
             return;
         }
 
-        Vec3d burstPos = groundHit.getPos().add(0.0d, 1.6d + level * 0.22d, 0.0d);
         float explosionPower = 6.5f + level * 2.0f;
         float damage = 16.0f + level * 6.0f;
         double radius = 6.5d + level * 2.0d;
@@ -306,7 +317,7 @@ public abstract class TridentEntityMixin {
 
         world.createExplosion(owner, burstPos.x, burstPos.y, burstPos.z, explosionPower, false, World.ExplosionSourceType.MOB);
         autoenchants$igniteNearbyBlocks(world, burstPos.x, burstPos.y - 1.0d, burstPos.z, 1 + level);
-        self.discard();
+        autoenchants$setTridentReturnState(self);
     }
 
     @Unique
@@ -354,27 +365,97 @@ public abstract class TridentEntityMixin {
     }
 
     @Unique
-    private BlockHitResult autoenchants$findGroundAhead(TridentEntity self) {
-        Vec3d start = self.getPos();
+    private boolean autoenchants$shouldTriggerAirburstOnEntityHit(TridentEntity self, Entity hitEntity) {
+        if (!(hitEntity instanceof LivingEntity living) || !living.isAlive()) {
+            return false;
+        }
         Vec3d velocity = self.getVelocity();
-        Vec3d forward = velocity.normalize().multiply(1.5d);
-        Vec3d end = start.add(forward).add(0.0d, -7.0d, 0.0d);
-        BlockHitResult hitResult = self.getWorld().raycast(new RaycastContext(
-                start,
-                end,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                self
-        ));
-        if (hitResult.getType() != HitResult.Type.BLOCK) {
+        if (velocity.lengthSquared() < 0.01d) {
+            return false;
+        }
+        Vec3d toTarget = living.getPos().add(0.0d, living.getHeight() * 0.5d, 0.0d).subtract(self.getPos());
+        if (toTarget.lengthSquared() < 1.0E-5d) {
+            return true;
+        }
+        return velocity.normalize().dotProduct(toTarget.normalize()) > 0.25d;
+    }
+
+    @Unique
+    private LivingEntity autoenchants$getOrAcquireAirburstTarget(TridentEntity self, int level) {
+        World world = self.getWorld();
+        if (world instanceof ServerWorld serverWorld && autoenchants$airburstTarget != null) {
+            Entity existing = serverWorld.getEntity(autoenchants$airburstTarget);
+            if (existing instanceof LivingEntity living && living.isAlive() && autoenchants$hasLineOfSight(self, living)) {
+                return living;
+            }
+            autoenchants$airburstTarget = null;
+        }
+
+        double range = 8.0d + level * 4.0d;
+        Vec3d velocity = self.getVelocity();
+        if (velocity.lengthSquared() < 1.0E-5d) {
             return null;
         }
-        BlockPos blockPos = hitResult.getBlockPos();
-        BlockState blockState = self.getWorld().getBlockState(blockPos);
-        if (!blockState.isSideSolidFullSquare(self.getWorld(), blockPos, Direction.UP)) {
-            return null;
+        Vec3d forward = velocity.normalize();
+
+        List<LivingEntity> candidates = world.getEntitiesByClass(
+                LivingEntity.class,
+                self.getBoundingBox().expand(range),
+                entity -> entity.isAlive() && entity != self.getOwner()
+        );
+
+        LivingEntity best = null;
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (LivingEntity candidate : candidates) {
+            Vec3d aimPoint = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d);
+            Vec3d toTarget = aimPoint.subtract(self.getPos());
+            if (toTarget.lengthSquared() < 1.0E-5d) {
+                continue;
+            }
+            double distance = toTarget.length();
+            Vec3d direction = toTarget.normalize();
+            double alignment = forward.dotProduct(direction);
+            if (alignment < 0.35d) {
+                continue;
+            }
+            if (!autoenchants$hasLineOfSight(self, candidate)) {
+                continue;
+            }
+            double score = alignment * 100.0d - distance * 2.5d;
+            if (score > bestScore) {
+                bestScore = score;
+                best = candidate;
+            }
         }
-        return hitResult;
+
+        if (best != null) {
+            autoenchants$airburstTarget = best.getUuid();
+        }
+        return best;
+    }
+
+    @Unique
+    private Vec3d autoenchants$getAirburstBurstPos(TridentEntity self, LivingEntity target, int level) {
+        Vec3d aimPoint = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        Vec3d toTarget = aimPoint.subtract(self.getPos());
+        if (toTarget.lengthSquared() < 1.0E-5d) {
+            return aimPoint;
+        }
+        double leadDistance = Math.min(1.2d + level * 0.35d, toTarget.length() * 0.45d);
+        return aimPoint.subtract(toTarget.normalize().multiply(leadDistance));
+    }
+
+    @Unique
+    private void autoenchants$setTridentReturnState(TridentEntity self) {
+        self.setNoClip(true);
+        ((PersistentProjectileEntityAccessor) self).setInGroundTime(0);
+        if (self.getY() < -65.0d) {
+            self.discard();
+            return;
+        }
+        if (self.pickupType != PersistentProjectileEntity.PickupPermission.ALLOWED) {
+            self.pickupType = PersistentProjectileEntity.PickupPermission.ALLOWED;
+        }
     }
 
     @Unique
