@@ -6,12 +6,12 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.mob.EndermanEntity;
 import net.minecraft.entity.mob.FlyingEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.SnowGolemEntity;
 import net.minecraft.entity.projectile.DragonFireballEntity;
-import net.minecraft.entity.projectile.ExplosiveProjectileEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.entity.projectile.WitherSkullEntity;
 import net.minecraft.entity.projectile.thrown.SnowballEntity;
@@ -146,7 +146,7 @@ public class SuperSnowGolemEntity extends SnowGolemEntity {
         if (entity == this || !entity.isAlive() || entity.isSpectator()) {
             return false;
         }
-        if (entity instanceof PeekabooShellEntity) {
+        if (entity instanceof PeekabooShellEntity || entity instanceof EndermanEntity) {
             return false;
         }
         if (!(entity instanceof Monster)
