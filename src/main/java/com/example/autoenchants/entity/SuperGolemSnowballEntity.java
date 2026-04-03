@@ -26,14 +26,15 @@ public class SuperGolemSnowballEntity extends SnowballEntity {
 
     @Override
     protected void onEntityHit(EntityHitResult entityHitResult) {
-        super.onEntityHit(entityHitResult);
         Entity target = entityHitResult.getEntity();
 
         if (target instanceof DragonFireballEntity || target instanceof WitherSkullEntity) {
-            deflectExplosiveProjectile(target);
+            burstExplosiveProjectile(target);
+            this.discard();
             return;
         }
 
+        super.onEntityHit(entityHitResult);
         target.damage(getDamageSources().thrown(this, getOwner()), 10.0f);
 
         if (this.getWorld() instanceof ServerWorld serverWorld) {
@@ -46,23 +47,20 @@ public class SuperGolemSnowballEntity extends SnowballEntity {
         }
     }
 
-    private void deflectExplosiveProjectile(Entity target) {
+    private void burstExplosiveProjectile(Entity target) {
         if (!(target instanceof ExplosiveProjectileEntity explosiveProjectile)) {
             return;
         }
-
-        Entity owner = getOwner();
-        explosiveProjectile.setOwner(owner instanceof LivingEntity livingOwner ? livingOwner : null);
-        explosiveProjectile.setVelocity(explosiveProjectile.getVelocity().multiply(-1.0d));
-        explosiveProjectile.velocityDirty = true;
 
         if (this.getWorld() instanceof ServerWorld serverWorld) {
             double x = target.getX();
             double y = target.getY() + target.getHeight() * 0.5d;
             double z = target.getZ();
-            serverWorld.spawnParticles(ParticleTypes.FLASH, x, y, z, 3, 0.15d, 0.15d, 0.15d, 0.0d);
-            serverWorld.spawnParticles(ParticleTypes.CRIT, x, y, z, 14, 0.18d, 0.18d, 0.18d, 0.08d);
-            serverWorld.spawnParticles(ParticleTypes.SNOWFLAKE, x, y, z, 12, 0.18d, 0.18d, 0.18d, 0.01d);
+            serverWorld.spawnParticles(ParticleTypes.FLASH, x, y, z, 4, 0.18d, 0.18d, 0.18d, 0.0d);
+            serverWorld.spawnParticles(ParticleTypes.CRIT, x, y, z, 18, 0.22d, 0.22d, 0.22d, 0.1d);
+            serverWorld.spawnParticles(ParticleTypes.SNOWFLAKE, x, y, z, 16, 0.2d, 0.2d, 0.2d, 0.02d);
         }
+
+        explosiveProjectile.discard();
     }
 }

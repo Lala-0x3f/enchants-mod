@@ -6,3 +6,4 @@ bin/
 *.zip
 gradle-*/
 .serena/
+/.ace-tool
