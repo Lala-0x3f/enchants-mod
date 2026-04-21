@@ -8,6 +8,7 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.PhantomEntity;
 import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.projectile.FireworkRocketEntity;
 import net.minecraft.entity.projectile.ShulkerBulletEntity;
@@ -260,7 +261,7 @@ public abstract class FireworkRocketEntityMixin {
             return locked;
         }
 
-        // 回退：在视场圆锥内搜索敌对生物。
+        // 回退：在视场圆锥内搜索敌对生物与幻翼。
         LivingEntity hostile = autoenchants$findBestHostileInCone(world, self, forward, owner);
         if (hostile != null) {
             autoenchants$guidedTargetId = hostile.getUuid();
@@ -282,17 +283,22 @@ public abstract class FireworkRocketEntityMixin {
 
     private LivingEntity autoenchants$findBestHostileInCone(ServerWorld world, Entity self, Vec3d forward, Entity owner) {
         double cosThreshold = Math.cos(Math.toRadians(GUIDANCE_CONE_HALF_ANGLE));
-        List<HostileEntity> candidates = world.getEntitiesByClass(
-                HostileEntity.class,
-                self.getBoundingBox().expand(GUIDANCE_CONE_RANGE),
-                entity -> entity.isAlive() && !entity.isSpectator() && entity != owner
+        Box searchBox = self.getBoundingBox().expand(GUIDANCE_CONE_RANGE);
+        List<LivingEntity> candidates = world.getEntitiesByClass(
+                LivingEntity.class,
+                searchBox,
+                entity -> entity.isAlive()
+                        && !entity.isSpectator()
+                        && entity != owner
+                        && entity != self
+                        && (entity instanceof HostileEntity || entity instanceof PhantomEntity)
         );
 
         LivingEntity best = null;
         double bestScore = -Double.MAX_VALUE;
         Vec3d selfPos = self.getPos();
         for (int i = 0, size = candidates.size(); i < size; i++) {
-            HostileEntity candidate = candidates.get(i);
+            LivingEntity candidate = candidates.get(i);
             Vec3d toCandidate = candidate.getPos().add(0.0d, candidate.getHeight() * 0.5d, 0.0d).subtract(selfPos);
             double distSq = toCandidate.lengthSquared();
             if (distSq < 1.0E-6d || distSq > GUIDANCE_CONE_RANGE * GUIDANCE_CONE_RANGE) {
