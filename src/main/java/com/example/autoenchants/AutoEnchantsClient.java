@@ -8,7 +8,9 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.minecraft.client.item.CompassAnglePredicateProvider;
 import net.minecraft.client.item.ModelPredicateProviderRegistry;
+import net.minecraft.client.render.entity.AllayEntityRenderer;
 import net.minecraft.client.render.entity.SnowGolemEntityRenderer;
+import net.minecraft.client.render.entity.TntEntityRenderer;
 import net.minecraft.util.Identifier;
 
 public class AutoEnchantsClient implements ClientModInitializer {
@@ -19,6 +21,8 @@ public class AutoEnchantsClient implements ClientModInitializer {
         EntityRendererRegistry.register(AutoEnchantsMod.SQUID_MISSILE, SquidMissileEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_GOLEM_SNOWBALL, SuperGolemSnowballEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_SNOW_GOLEM, SnowGolemEntityRenderer::new);
+        EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_ALLAY, AllayEntityRenderer::new);
+        EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_TNT, TntEntityRenderer::new);
 
         // 为目标指针注册 angle 模型谓词提供者，使其能正确渲染指南针动画
         // 原版仅为 Items.LODESTONE_COMPASS 注册此属性，自定义 CompassItem 需手动注册

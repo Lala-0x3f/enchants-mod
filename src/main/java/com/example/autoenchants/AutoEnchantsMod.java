@@ -20,6 +20,8 @@ import com.example.autoenchants.enchant.StrangeWandEnchantment;
 import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
+import com.example.autoenchants.entity.BomberAllayEntity;
+import com.example.autoenchants.entity.BomberTntEntity;
 import com.example.autoenchants.entity.PeekabooShellEntity;
 import com.example.autoenchants.entity.PeekabooSparkEntity;
 import com.example.autoenchants.entity.SuperGolemSnowballEntity;
@@ -48,6 +50,7 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.SpawnGroup;
 import net.minecraft.entity.mob.EvokerFangsEntity;
+import net.minecraft.entity.passive.AllayEntity;
 import net.minecraft.entity.passive.SnowGolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
@@ -104,11 +107,14 @@ public class AutoEnchantsMod implements ModInitializer {
     public static EntityType<SquidMissileEntity> SQUID_MISSILE;
     public static EntityType<SuperSnowGolemEntity> SUPER_SNOW_GOLEM;
     public static EntityType<SuperGolemSnowballEntity> SUPER_GOLEM_SNOWBALL;
+    public static EntityType<BomberAllayEntity> BOMBER_ALLAY;
+    public static EntityType<BomberTntEntity> BOMBER_TNT;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
     public static StatusEffect RETRO_BOOTS_COOLDOWN;
     public static Item SUPER_SNOW_GOLEM_SPAWN_EGG;
+    public static Item BOMBER_ALLAY_SPAWN_EGG;
 
     @Override
     public void onInitialize() {
@@ -162,6 +168,26 @@ public class AutoEnchantsMod implements ModInitializer {
                         .build()
         );
         FabricDefaultAttributeRegistry.register(SUPER_SNOW_GOLEM, SnowGolemEntity.createSnowGolemAttributes());
+
+        BOMBER_ALLAY = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("bomber_allay"),
+                FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, BomberAllayEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.35f, 0.6f))
+                        .trackRangeBlocks(80)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(BOMBER_ALLAY, AllayEntity.createAllayAttributes());
+
+        BOMBER_TNT = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("bomber_tnt"),
+                FabricEntityTypeBuilder.<BomberTntEntity>create(SpawnGroup.MISC, BomberTntEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.98f, 0.98f))
+                        .trackRangeBlocks(64)
+                        .trackedUpdateRate(10)
+                        .build()
+        );
 
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
@@ -307,6 +333,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SpawnEggItem(SUPER_SNOW_GOLEM, 0xBFD7FF, 0x4F5F6E, new Item.Settings())
         );
 
+        BOMBER_ALLAY_SPAWN_EGG = Registry.register(
+                Registries.ITEM,
+                id("bomber_allay_spawn_egg"),
+                new SpawnEggItem(BOMBER_ALLAY, 0x88AFFF, 0xC83232, new Item.Settings())
+        );
+
         Registry.register(Registries.ITEM_GROUP, id("main"),
                 FabricItemGroup.builder()
                         .icon(() -> new ItemStack(TARGET_POINTER))
@@ -316,6 +348,7 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(SQUID_MISSILE_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
+                            entries.add(BOMBER_ALLAY_SPAWN_EGG);
                             addEnchantedBooks(entries);
                         })
                         .build()
