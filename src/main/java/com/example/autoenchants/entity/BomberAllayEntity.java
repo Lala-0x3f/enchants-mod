@@ -21,8 +21,11 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
 import java.util.Comparator;
@@ -38,11 +41,13 @@ import java.util.List;
 public class BomberAllayEntity extends AllayEntity {
     private static final double TNT_SEARCH_RANGE = 96.0d;
     private static final double TARGET_SEARCH_RANGE = 192.0d;
-    private static final double DROP_HEIGHT_TARGET = 8.0d;
-    private static final double DROP_HEIGHT_MIN = 7.5d;
-    private static final double DROP_HEIGHT_MAX = 9.5d;
-    private static final double DROP_HORIZONTAL_TOLERANCE = 1.0d;
+    private static final double DROP_HEIGHT_TARGET = 9.5d;
+    private static final double DROP_HEIGHT_MIN = 8.5d;
+    private static final double DROP_HEIGHT_MAX = 11.5d;
+    private static final double DROP_HORIZONTAL_TOLERANCE = 1.2d;
     private static final int BOMB_COOLDOWN_TICKS = 30;
+    /** 重新发起寻路的最短间隔，避免每 tick 都重算路径。 */
+    private static final int REPATH_INTERVAL = 10;
     /** 扫描到有效目标/物品后的刷新间隔。 */
     private static final int SCAN_INTERVAL_FOUND = 20;
     /** 扫描为空后的退避间隔，避免空场景下高频全量扫。 */
@@ -53,6 +58,7 @@ public class BomberAllayEntity extends AllayEntity {
     private int bombScanCooldown;
     private int pickupScanCooldown;
     private int idleWanderTicks;
+    private int repathCooldown;
     private LivingEntity currentTarget;
     private ItemEntity currentTntItem;
 
@@ -101,6 +107,9 @@ public class BomberAllayEntity extends AllayEntity {
         if (idleWanderTicks > 0) {
             idleWanderTicks--;
         }
+        if (repathCooldown > 0) {
+            repathCooldown--;
+        }
 
         if (getHeldStack().isOf(Items.TNT)) {
             tickBombingState();
@@ -131,8 +140,8 @@ public class BomberAllayEntity extends AllayEntity {
         }
 
         Vec3d itemPos = currentTntItem.getPos();
-        // 飞到物品略上方再下沉，避免穿地。
-        this.getMoveControl().moveTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 1.2d);
+        // 用 Navigation 进行真正的寻路，绕开墙体；MoveControl 只能直线推进会卡墙。
+        navigateTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 1.2d);
         this.getLookControl().lookAt(itemPos.x, itemPos.y, itemPos.z);
 
         if (this.squaredDistanceTo(currentTntItem) <= 1.5d * 1.5d) {
@@ -198,7 +207,8 @@ public class BomberAllayEntity extends AllayEntity {
         double aimY = currentTarget.getY() + DROP_HEIGHT_TARGET;
         double aimZ = currentTarget.getZ();
 
-        this.getMoveControl().moveTo(aimX, aimY, aimZ, 1.3d);
+        // 真正寻路（BirdNavigation 会在 3D 空间绕开方块）。
+        navigateTo(aimX, aimY, aimZ, 1.3d);
         this.getLookControl().lookAt(currentTarget.getX(), currentTarget.getY(), currentTarget.getZ());
 
         if (bombCooldown > 0) {
@@ -211,7 +221,8 @@ public class BomberAllayEntity extends AllayEntity {
         double dy = this.getY() - currentTarget.getY();
         if (horizontalSq <= DROP_HORIZONTAL_TOLERANCE * DROP_HORIZONTAL_TOLERANCE
                 && dy >= DROP_HEIGHT_MIN
-                && dy <= DROP_HEIGHT_MAX) {
+                && dy <= DROP_HEIGHT_MAX
+                && hasClearDropPath(currentTarget)) {
             dropTnt();
         }
     }
@@ -300,6 +311,37 @@ public class BomberAllayEntity extends AllayEntity {
         }
 
         bombCooldown = BOMB_COOLDOWN_TICKS;
+
+        // 投弹后立即向上加速，远离爆炸范围（vanilla TNT power=4，伤害半径约 8 格）。
+        this.setVelocity(this.getVelocity().x * 0.2d, 0.6d, this.getVelocity().z * 0.2d);
+        this.velocityModified = true;
+        this.getNavigation().stop();
+        repathCooldown = 10;
+    }
+
+    /**
+     * 检查从悦灵到目标头顶之间是否没有方块阻挡，避免 TNT 一生成就撞到天花板/上方方块在悦灵附近爆炸。
+     */
+    private boolean hasClearDropPath(LivingEntity target) {
+        Vec3d start = new Vec3d(this.getX(), this.getY() - 0.5d, this.getZ());
+        Vec3d end = new Vec3d(target.getX(), target.getY() + target.getHeight() + 0.1d, target.getZ());
+        BlockHitResult hit = this.getWorld().raycast(new RaycastContext(
+                start, end,
+                RaycastContext.ShapeType.COLLIDER,
+                RaycastContext.FluidHandling.NONE,
+                this));
+        return hit.getType() == HitResult.Type.MISS;
+    }
+
+    /**
+     * 通过 Navigation 进行真正的 A* 寻路；只在路径完成或冷却结束时重新发路径，避免抖动。
+     */
+    private void navigateTo(double x, double y, double z, double speed) {
+        if (repathCooldown > 0 && !this.getNavigation().isIdle()) {
+            return;
+        }
+        this.getNavigation().startMovingTo(x, y, z, speed);
+        repathCooldown = REPATH_INTERVAL;
     }
 
     /* ---------------- Idle ---------------- */
@@ -313,6 +355,6 @@ public class BomberAllayEntity extends AllayEntity {
         double dx = (this.random.nextDouble() - 0.5d) * 8.0d;
         double dy = (this.random.nextDouble() - 0.5d) * 4.0d;
         double dz = (this.random.nextDouble() - 0.5d) * 8.0d;
-        this.getMoveControl().moveTo(this.getX() + dx, this.getY() + dy, this.getZ() + dz, 0.8d);
+        navigateTo(this.getX() + dx, this.getY() + dy, this.getZ() + dz, 0.8d);
     }
 }
