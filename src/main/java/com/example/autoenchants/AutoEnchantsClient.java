@@ -1,5 +1,6 @@
 package com.example.autoenchants;
 
+import com.example.autoenchants.client.render.ArmorPiercingArrowEntityRenderer;
 import com.example.autoenchants.client.render.PeekabooShellEntityRenderer;
 import com.example.autoenchants.client.render.PeekabooSparkEntityRenderer;
 import com.example.autoenchants.client.render.SquidMissileEntityRenderer;
@@ -23,6 +24,7 @@ public class AutoEnchantsClient implements ClientModInitializer {
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_SNOW_GOLEM, SnowGolemEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_ALLAY, AllayEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_TNT, TntEntityRenderer::new);
+        EntityRendererRegistry.register(AutoEnchantsMod.ARMOR_PIERCING_ARROW, ArmorPiercingArrowEntityRenderer::new);
 
         // 为目标指针注册 angle 模型谓词提供者，使其能正确渲染指南针动画
         // 原版仅为 Items.LODESTONE_COMPASS 注册此属性，自定义 CompassItem 需手动注册

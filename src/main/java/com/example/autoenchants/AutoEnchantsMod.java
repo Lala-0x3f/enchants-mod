@@ -20,6 +20,7 @@ import com.example.autoenchants.enchant.StrangeWandEnchantment;
 import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
+import com.example.autoenchants.entity.ArmorPiercingArrowEntity;
 import com.example.autoenchants.entity.BomberAllayEntity;
 import com.example.autoenchants.entity.BomberTntEntity;
 import com.example.autoenchants.entity.PeekabooShellEntity;
@@ -27,6 +28,7 @@ import com.example.autoenchants.entity.PeekabooSparkEntity;
 import com.example.autoenchants.entity.SuperGolemSnowballEntity;
 import com.example.autoenchants.entity.SuperSnowGolemEntity;
 import com.example.autoenchants.entity.SquidMissileEntity;
+import com.example.autoenchants.item.ArmorPiercingArrowItem;
 import com.example.autoenchants.item.SquidMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
@@ -102,6 +104,8 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
+    public static Item ARMOR_PIERCING_ARROW_ITEM;
+    public static EntityType<ArmorPiercingArrowEntity> ARMOR_PIERCING_ARROW;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
     public static EntityType<SquidMissileEntity> SQUID_MISSILE;
@@ -178,6 +182,16 @@ public class AutoEnchantsMod implements ModInitializer {
                         .build()
         );
         FabricDefaultAttributeRegistry.register(BOMBER_ALLAY, AllayEntity.createAllayAttributes());
+
+        ARMOR_PIERCING_ARROW = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("armor_piercing_arrow"),
+                FabricEntityTypeBuilder.<ArmorPiercingArrowEntity>create(SpawnGroup.MISC, ArmorPiercingArrowEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.5f, 0.5f))
+                        .trackRangeBlocks(80)
+                        .trackedUpdateRate(20)
+                        .build()
+        );
 
         BOMBER_TNT = Registry.register(
                 Registries.ENTITY_TYPE,
@@ -327,6 +341,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new SquidMissileItem(new Item.Settings().maxCount(16))
         );
 
+        ARMOR_PIERCING_ARROW_ITEM = Registry.register(
+                Registries.ITEM,
+                id("armor_piercing_arrow"),
+                new ArmorPiercingArrowItem(new Item.Settings())
+        );
+
         SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("super_snow_golem_spawn_egg"),
@@ -346,6 +366,7 @@ public class AutoEnchantsMod implements ModInitializer {
                         .entries((context, entries) -> {
                             entries.add(TARGET_POINTER);
                             entries.add(SQUID_MISSILE_ITEM);
+                            entries.add(ARMOR_PIERCING_ARROW_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
                             entries.add(BOMBER_ALLAY_SPAWN_EGG);

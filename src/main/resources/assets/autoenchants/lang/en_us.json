@@ -32,5 +32,7 @@
   "enchantment.autoenchants.retro_boots": "Retro Boots",
   "effect.autoenchants.retro_boots_cooldown": "Retro Boots Cooldown",
   "item.autoenchants.bomber_allay_spawn_egg": "Bomber Allay Spawn Egg",
-  "entity.autoenchants.bomber_allay": "Bomber Allay"
+  "entity.autoenchants.bomber_allay": "Bomber Allay",
+  "item.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow",
+  "entity.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow"
 }
