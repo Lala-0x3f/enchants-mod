@@ -48,15 +48,15 @@ public class ArmorPiercingArrowEntity extends PersistentProjectileEntity {
     private final Set<UUID> piercedEntities = new HashSet<>();
 
     public ArmorPiercingArrowEntity(EntityType<? extends ArmorPiercingArrowEntity> type, World world) {
-        super(type, world);
+        super(type, world, new ItemStack(AutoEnchantsMod.ARMOR_PIERCING_ARROW_ITEM));
     }
 
     public ArmorPiercingArrowEntity(World world, LivingEntity shooter) {
-        super(AutoEnchantsMod.ARMOR_PIERCING_ARROW, shooter, world);
+        super(AutoEnchantsMod.ARMOR_PIERCING_ARROW, shooter, world, new ItemStack(AutoEnchantsMod.ARMOR_PIERCING_ARROW_ITEM));
     }
 
     public ArmorPiercingArrowEntity(World world, double x, double y, double z) {
-        super(AutoEnchantsMod.ARMOR_PIERCING_ARROW, x, y, z, world);
+        super(AutoEnchantsMod.ARMOR_PIERCING_ARROW, x, y, z, world, new ItemStack(AutoEnchantsMod.ARMOR_PIERCING_ARROW_ITEM));
     }
 
     @Override
