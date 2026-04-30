@@ -21,6 +21,7 @@ import com.example.autoenchants.enchant.SquidIronFistEnchantment;
 import com.example.autoenchants.enchant.ThermalHelmetEnchantment;
 import com.example.autoenchants.enchant.TripleBurstEnchantment;
 import com.example.autoenchants.entity.ArmorPiercingArrowEntity;
+import com.example.autoenchants.entity.BeeMissileEntity;
 import com.example.autoenchants.entity.BomberAllayEntity;
 import com.example.autoenchants.entity.BomberTntEntity;
 import com.example.autoenchants.entity.PeekabooShellEntity;
@@ -29,6 +30,7 @@ import com.example.autoenchants.entity.SuperGolemSnowballEntity;
 import com.example.autoenchants.entity.SuperSnowGolemEntity;
 import com.example.autoenchants.entity.SquidMissileEntity;
 import com.example.autoenchants.item.ArmorPiercingArrowItem;
+import com.example.autoenchants.item.BeeMissileItem;
 import com.example.autoenchants.item.SquidMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
@@ -105,6 +107,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
     public static Item ARMOR_PIERCING_ARROW_ITEM;
+    public static Item BEE_MISSILE_ITEM;
     public static EntityType<ArmorPiercingArrowEntity> ARMOR_PIERCING_ARROW;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
@@ -113,6 +116,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static EntityType<SuperGolemSnowballEntity> SUPER_GOLEM_SNOWBALL;
     public static EntityType<BomberAllayEntity> BOMBER_ALLAY;
     public static EntityType<BomberTntEntity> BOMBER_TNT;
+    public static EntityType<BeeMissileEntity> BEE_MISSILE;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
@@ -202,6 +206,17 @@ public class AutoEnchantsMod implements ModInitializer {
                         .trackedUpdateRate(10)
                         .build()
         );
+
+        BEE_MISSILE = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("bee_missile"),
+                FabricEntityTypeBuilder.<BeeMissileEntity>create(SpawnGroup.MISC, BeeMissileEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.7f, 0.6f))
+                        .trackRangeBlocks(80)
+                        .trackedUpdateRate(2)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(BEE_MISSILE, net.minecraft.entity.passive.BeeEntity.createBeeAttributes());
 
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
@@ -347,6 +362,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new ArmorPiercingArrowItem(new Item.Settings())
         );
 
+        BEE_MISSILE_ITEM = Registry.register(
+                Registries.ITEM,
+                id("bee_missile"),
+                new BeeMissileItem(new Item.Settings().maxCount(16))
+        );
+
         SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("super_snow_golem_spawn_egg"),
@@ -367,6 +388,7 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(TARGET_POINTER);
                             entries.add(SQUID_MISSILE_ITEM);
                             entries.add(ARMOR_PIERCING_ARROW_ITEM);
+                            entries.add(BEE_MISSILE_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
                             entries.add(BOMBER_ALLAY_SPAWN_EGG);

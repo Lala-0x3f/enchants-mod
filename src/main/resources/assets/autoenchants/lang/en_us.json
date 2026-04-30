@@ -34,5 +34,7 @@
   "item.autoenchants.bomber_allay_spawn_egg": "Bomber Allay Spawn Egg",
   "entity.autoenchants.bomber_allay": "Bomber Allay",
   "item.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow",
-  "entity.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow"
+  "entity.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow",
+  "item.autoenchants.bee_missile": "Bee Missile",
+  "entity.autoenchants.bee_missile": "Bee Missile"
 }

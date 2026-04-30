@@ -34,5 +34,7 @@
   "item.autoenchants.bomber_allay_spawn_egg": "投弹悦灵刷怪蛋",
   "entity.autoenchants.bomber_allay": "投弹悦灵",
   "item.autoenchants.armor_piercing_arrow": "穿甲箭",
-  "entity.autoenchants.armor_piercing_arrow": "穿甲箭"
+  "entity.autoenchants.armor_piercing_arrow": "穿甲箭",
+  "item.autoenchants.bee_missile": "蜜蜂导弹",
+  "entity.autoenchants.bee_missile": "蜜蜂导弹"
 }

@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.minecraft.client.item.CompassAnglePredicateProvider;
 import net.minecraft.client.item.ModelPredicateProviderRegistry;
 import net.minecraft.client.render.entity.AllayEntityRenderer;
+import net.minecraft.client.render.entity.BeeEntityRenderer;
 import net.minecraft.client.render.entity.SnowGolemEntityRenderer;
 import net.minecraft.client.render.entity.TntEntityRenderer;
 import net.minecraft.util.Identifier;
@@ -23,6 +24,7 @@ public class AutoEnchantsClient implements ClientModInitializer {
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_GOLEM_SNOWBALL, SuperGolemSnowballEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_SNOW_GOLEM, SnowGolemEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_ALLAY, AllayEntityRenderer::new);
+        EntityRendererRegistry.register(AutoEnchantsMod.BEE_MISSILE, BeeEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_TNT, TntEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.ARMOR_PIERCING_ARROW, ArmorPiercingArrowEntityRenderer::new);
 
