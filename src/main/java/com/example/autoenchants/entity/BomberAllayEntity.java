@@ -6,6 +6,8 @@ import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.attribute.EntityAttributeInstance;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.ai.goal.SwimGoal;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.mob.BlazeEntity;
@@ -40,8 +42,10 @@ import java.util.List;
  * - 不会主动攻击玩家或飞行生物。
  */
 public class BomberAllayEntity extends AllayEntity {
-    private static final double TNT_SEARCH_RANGE = 96.0d;
-    private static final double TARGET_SEARCH_RANGE = 192.0d;
+    /** 寻敌与寻找 TNT 补给的搜索半径保持一致，避免「能看见目标却找不到补给」或反之。 */
+    private static final double SEARCH_RANGE = 256.0d;
+    private static final double TNT_SEARCH_RANGE = SEARCH_RANGE;
+    private static final double TARGET_SEARCH_RANGE = SEARCH_RANGE;
     /** 单个悦灵主手上可携带的 TNT 上限。 */
     private static final int MAX_HELD_TNT = 8;
     /** 目标评分随机扰动范围：足以让不同悦灵选不同目标，但小于 RaiderEntity 优先加成。 */
@@ -76,6 +80,15 @@ public class BomberAllayEntity extends AllayEntity {
     public BomberAllayEntity(EntityType<? extends AllayEntity> entityType, World world) {
         super(entityType, world);
         this.setCanPickUpLoot(true);
+        // 提升飞行/移动速度：原版 Allay 默认 0.1，这里翻倍以加快寻敌与补给往返。
+        EntityAttributeInstance flying = this.getAttributeInstance(EntityAttributes.GENERIC_FLYING_SPEED);
+        if (flying != null) {
+            flying.setBaseValue(0.6d);
+        }
+        EntityAttributeInstance moving = this.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
+        if (moving != null) {
+            moving.setBaseValue(0.4d);
+        }
     }
 
     private ItemStack getHeldStack() {
