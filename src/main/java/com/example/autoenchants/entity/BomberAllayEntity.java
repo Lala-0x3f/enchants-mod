@@ -4,7 +4,6 @@ import com.example.autoenchants.AutoEnchantsMod;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -23,6 +22,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.BlockPos;
@@ -59,8 +59,11 @@ public class BomberAllayEntity extends AllayEntity {
     /** 刚炸过的目标在多久内会被评分惩罚，使下一枚 TNT 优先投到别的目标。 */
     private static final int RECENT_BOMB_AVOID_TICKS = 100;
     private static final double RECENT_BOMB_PENALTY = 150.0d;
-    /** 重新发起寻路的最短间隔，避免每 tick 都重算路径。 */
+    /** 重新发起寻路的最短间隔，避免每 tick 都重算路径。投弹状态需要更稳定，间隔更长。 */
     private static final int REPATH_INTERVAL = 10;
+    private static final int REPATH_INTERVAL_BOMBING = 20;
+    /** 目标移动超过此距离才重新计算 aimY，避免高度频繁抖动。 */
+    private static final double AIMY_RECALC_THRESHOLD = 2.0d;
     /** 扫描到有效目标/物品后的刷新间隔。 */
     private static final int SCAN_INTERVAL_FOUND = 20;
     /** 扫描为空后的退避间隔，避免空场景下高频全量扫。 */
@@ -76,18 +79,23 @@ public class BomberAllayEntity extends AllayEntity {
     private ItemEntity currentTntItem;
     private java.util.UUID lastBombedTargetUuid;
     private int lastBombedTargetCooldown;
+    /** 缓存的目标投弹高度，只有当目标显著移动时才重新计算。 */
+    private double cachedTargetAimY = Double.NaN;
+    private double cachedTargetX = Double.NaN;
+    private double cachedTargetZ = Double.NaN;
 
     public BomberAllayEntity(EntityType<? extends AllayEntity> entityType, World world) {
         super(entityType, world);
-        this.setCanPickUpLoot(true);
-        // 提升飞行/移动速度：原版 Allay 默认 0.1，这里翻倍以加快寻敌与补给往返。
+        // 禁用原版自动拾取，通过 tickPickupState 手动处理 TNT 拾取以严格控制数量
+        this.setCanPickUpLoot(false);
+        // 适度提升飞行/移动速度：原版 Allay 默认 0.1，这里设为 0.25 加快寻敌与补给往返。
         EntityAttributeInstance flying = this.getAttributeInstance(EntityAttributes.GENERIC_FLYING_SPEED);
         if (flying != null) {
-            flying.setBaseValue(0.6d);
+            flying.setBaseValue(0.25d);
         }
         EntityAttributeInstance moving = this.getAttributeInstance(EntityAttributes.GENERIC_MOVEMENT_SPEED);
         if (moving != null) {
-            moving.setBaseValue(0.4d);
+            moving.setBaseValue(0.2d);
         }
     }
 
@@ -100,6 +108,16 @@ public class BomberAllayEntity extends AllayEntity {
 
     private void setHeldStack(ItemStack stack) {
         this.equipStack(EquipmentSlot.MAINHAND, stack);
+    }
+
+    /**
+     * 阻止原版 Allay 的自动拾取行为。
+     * 投弹悦灵只能通过 tickPickupState 中的 tryPickupTnt 方法拾取 TNT，且严格限制 8 个上限。
+     */
+    @Override
+    protected void pickUpItem(ServerWorld world, ItemEntity item) {
+        // 完全阻止原版拾取逻辑，所有拾取由 tickPickupState 中的自定义逻辑控制
+        return;
     }
 
     @Override
@@ -172,7 +190,7 @@ public class BomberAllayEntity extends AllayEntity {
         Vec3d itemPos = currentTntItem.getPos();
         // 用 Navigation 进行真正的寻路，绕开墙体；MoveControl 只能直线推进会卡墙。
         // 空手状态下飞行速度提高，加快去拿 TNT 补给。
-        navigateTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 2.0d);
+        navigateTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 1.2d);
         this.getLookControl().lookAt(itemPos.x, itemPos.y, itemPos.z);
 
         if (this.squaredDistanceTo(currentTntItem) <= 1.5d * 1.5d) {
@@ -244,19 +262,34 @@ public class BomberAllayEntity extends AllayEntity {
         // 把顶上的方块炸掉清出通道，下一轮再下降至常规高度命中目标本体。
         double aimX = currentTarget.getX();
         double aimZ = currentTarget.getZ();
-        double aimY = resolveAimY(currentTarget);
+
+        // 只有当目标显著移动时才重新计算 aimY，避免高度频繁抖动导致晃动。
+        double targetMovedSq = (aimX - cachedTargetX) * (aimX - cachedTargetX)
+                + (aimZ - cachedTargetZ) * (aimZ - cachedTargetZ);
+        if (Double.isNaN(cachedTargetAimY) || targetMovedSq > AIMY_RECALC_THRESHOLD * AIMY_RECALC_THRESHOLD) {
+            cachedTargetAimY = resolveAimY(currentTarget);
+            cachedTargetX = aimX;
+            cachedTargetZ = aimZ;
+        }
+        double aimY = cachedTargetAimY;
+
+        // 检查水平位置是否已经就位，若已水平对准则降低导航更新频率，减少晃动。
+        double dx = this.getX() - aimX;
+        double dz = this.getZ() - aimZ;
+        double horizontalSq = dx * dx + dz * dz;
+        boolean isInPosition = horizontalSq <= DROP_HORIZONTAL_TOLERANCE * DROP_HORIZONTAL_TOLERANCE * 4.0d;
 
         // 真正寻路（BirdNavigation 会在 3D 空间绕开方块）。
-        navigateTo(aimX, aimY, aimZ, 1.3d);
+        // 若已就位则降低速度乘数，让移动更平滑。
+        double speed = isInPosition ? 0.6d : 1.0d;
+        navigateTo(aimX, aimY, aimZ, speed, isInPosition ? REPATH_INTERVAL_BOMBING : REPATH_INTERVAL);
         this.getLookControl().lookAt(currentTarget.getX(), currentTarget.getY(), currentTarget.getZ());
 
         if (bombCooldown > 0) {
             return;
         }
 
-        double dx = this.getX() - currentTarget.getX();
-        double dz = this.getZ() - currentTarget.getZ();
-        double horizontalSq = dx * dx + dz * dz;
+        // 复用上方已计算的 dx, dz, horizontalSq 和 isInPosition
         double dy = this.getY() - currentTarget.getY();
         // 仅约束最低投弹高度：太低 TNT 会把悦灵自己炸到。上限不再设置——
         // 太高时 TNT 自由落体会先撞到目标顶上的方块并爆炸（BomberTntEntity 触地即爆），
@@ -386,6 +419,10 @@ public class BomberAllayEntity extends AllayEntity {
             lastBombedTargetCooldown = RECENT_BOMB_AVOID_TICKS;
         }
         currentTarget = null;
+        // 清除缓存的高度，以便下次选择新目标时重新计算
+        cachedTargetAimY = Double.NaN;
+        cachedTargetX = Double.NaN;
+        cachedTargetZ = Double.NaN;
         bombScanCooldown = 0;
 
         world.playSound(null, this.getX(), this.getY(), this.getZ(),
@@ -398,22 +435,30 @@ public class BomberAllayEntity extends AllayEntity {
 
         bombCooldown = BOMB_COOLDOWN_TICKS;
 
-        // 投弹后立即向上加速，远离爆炸范围（vanilla TNT power=4，伤害半径约 8 格）。
-        this.setVelocity(this.getVelocity().x * 0.2d, 0.6d, this.getVelocity().z * 0.2d);
+        // 投弹后适度向上加速远离爆炸范围，但不宜过强以免与导航冲突导致晃动。
+        this.setVelocity(this.getVelocity().x * 0.2d, 0.25d, this.getVelocity().z * 0.2d);
         this.velocityModified = true;
         this.getNavigation().stop();
-        repathCooldown = 10;
+        // 延长冷却，让悦灵有时间稳定后再重新寻路
+        repathCooldown = 30;
     }
 
     /**
      * 通过 Navigation 进行真正的 A* 寻路；只在路径完成或冷却结束时重新发路径，避免抖动。
      */
     private void navigateTo(double x, double y, double z, double speed) {
+        navigateTo(x, y, z, speed, REPATH_INTERVAL);
+    }
+
+    /**
+     * 通过 Navigation 进行真正的 A* 寻路，可指定重路径间隔。
+     */
+    private void navigateTo(double x, double y, double z, double speed, int interval) {
         if (repathCooldown > 0 && !this.getNavigation().isIdle()) {
             return;
         }
         this.getNavigation().startMovingTo(x, y, z, speed);
-        repathCooldown = REPATH_INTERVAL;
+        repathCooldown = interval;
     }
 
     /* ---------------- Idle ---------------- */
@@ -427,6 +472,6 @@ public class BomberAllayEntity extends AllayEntity {
         double dx = (this.random.nextDouble() - 0.5d) * 8.0d;
         double dy = (this.random.nextDouble() - 0.5d) * 4.0d;
         double dz = (this.random.nextDouble() - 0.5d) * 8.0d;
-        navigateTo(this.getX() + dx, this.getY() + dy, this.getZ() + dz, 0.8d);
+        navigateTo(this.getX() + dx, this.getY() + dy, this.getZ() + dz, 0.6d);
     }
 }
