@@ -51,10 +51,7 @@ public class BomberAllayEntity extends AllayEntity {
     /** 目标评分随机扰动范围：足以让不同悦灵选不同目标，但小于 RaiderEntity 优先加成。 */
     private static final double TARGET_SCORE_NOISE = 100.0d;
     private static final double DROP_HEIGHT_TARGET = 9.5d;
-    private static final double DROP_HEIGHT_MIN = 6.5d;
     private static final double DROP_HORIZONTAL_TOLERANCE = 1.2d;
-    /** 在目标正上方扫描方块的最大距离，用于判断是否需要先炸毁顶上的方块。 */
-    private static final int OBSTRUCTION_SCAN_HEIGHT = 16;
     private static final int BOMB_COOLDOWN_TICKS = 60;
     /** 刚炸过的目标在多久内会被评分惩罚，使下一枚 TNT 优先投到别的目标。 */
     private static final int RECENT_BOMB_AVOID_TICKS = 100;
@@ -133,6 +130,9 @@ public class BomberAllayEntity extends AllayEntity {
             return;
         }
 
+        // 强制检查：手上TNT超过8个时丢弃多余部分
+        enforceHeldTntLimit();
+
         if (bombCooldown > 0) {
             bombCooldown--;
         }
@@ -159,9 +159,58 @@ public class BomberAllayEntity extends AllayEntity {
         }
     }
 
+    /**
+     * 强制确保手上TNT不超过上限，超过则丢弃多余部分到地上。
+     */
+    private void enforceHeldTntLimit() {
+        ItemStack held = getHeldStack();
+        if (!held.isOf(Items.TNT)) {
+            return;
+        }
+        int count = held.getCount();
+        if (count <= MAX_HELD_TNT) {
+            return;
+        }
+        // 丢弃多余部分
+        int excess = count - MAX_HELD_TNT;
+        setHeldStack(new ItemStack(Items.TNT, MAX_HELD_TNT));
+        spawnExcessTnt(excess);
+    }
+
+    /**
+     * 在脚下生成多余TNT物品实体。
+     */
+    private void spawnExcessTnt(int count) {
+        if (count <= 0 || this.getWorld().isClient()) {
+            return;
+        }
+        ItemStack dropStack = new ItemStack(Items.TNT, count);
+        ItemEntity itemEntity = new ItemEntity(
+                this.getWorld(),
+                this.getX(),
+                this.getY() - 0.3d,
+                this.getZ(),
+                dropStack
+        );
+        itemEntity.setPickupDelay(40); // 2秒内不能被自己捡回
+        itemEntity.setVelocity(
+                (this.random.nextDouble() - 0.5d) * 0.2d,
+                0.15d,
+                (this.random.nextDouble() - 0.5d) * 0.2d
+        );
+        this.getWorld().spawnEntity(itemEntity);
+    }
+
     /* ---------------- Pickup state ---------------- */
 
     private void tickPickupState() {
+        // 手上已满8个TNT时，不再寻找物品，直接进入投弹状态
+        ItemStack held = getHeldStack();
+        if (held.isOf(Items.TNT) && held.getCount() >= MAX_HELD_TNT) {
+            currentTntItem = null;
+            return;
+        }
+
         // 当前物品丢失（被别人拾走/衰减）时立即允许重扫。
         if (currentTntItem != null && (!currentTntItem.isAlive()
                 || !currentTntItem.getStack().isOf(Items.TNT))) {
@@ -208,6 +257,12 @@ public class BomberAllayEntity extends AllayEntity {
         }
         ItemStack held = getHeldStack();
         int currentCount = held.isOf(Items.TNT) ? held.getCount() : 0;
+
+        // 已满8个时不再拾取
+        if (currentCount >= MAX_HELD_TNT) {
+            return;
+        }
+
         int canTake = Math.min(stack.getCount(), MAX_HELD_TNT - currentCount);
         if (canTake <= 0) {
             return;
@@ -282,44 +337,42 @@ public class BomberAllayEntity extends AllayEntity {
             return;
         }
 
-        // 复用上方已计算的 dx, dz, horizontalSq 和 isInPosition
-        double dy = this.getY() - currentTarget.getY();
-        // 仅约束最低投弹高度：太低 TNT 会把悦灵自己炸到。上限不再设置——
-        // 太高时 TNT 自由落体会先撞到目标顶上的方块并爆炸（BomberTntEntity 触地即爆），
-        // 正好用来把阻挡物清掉，符合「先炸毁目标上空方块」的诉求。
+        // aimY 已编码了正确的安全投弹高度，到达即投。
         if (horizontalSq <= DROP_HORIZONTAL_TOLERANCE * DROP_HORIZONTAL_TOLERANCE
-                && dy >= DROP_HEIGHT_MIN) {
+                && this.getY() >= cachedTargetAimY - 1.5d) {
             dropTnt();
         }
     }
 
     /**
-     * 解算瞄准的 Y 坐标：找到目标正上方第一格非空气方块的位置，瞄到「该方块再往上 DROP_HEIGHT_TARGET 格」；
-     * 若头顶通畅则直接 target.y + DROP_HEIGHT_TARGET。这样在被天花板罩住的目标上空也有可投弹位置。
+     * 解算悦灵的目标投弹高度。
+     * 悦灵投弹时水平可能偏移最多 DROP_HORIZONTAL_TOLERANCE 格，需要扫描整个投弹区域内
+     * 所有列的最高实体方块顶面（即最危险的潜在爆炸点），加上安全距离后作为目标高度。
      */
     private double resolveAimY(LivingEntity target) {
         World world = this.getWorld();
         int tx = MathHelper.floor(target.getX());
         int tz = MathHelper.floor(target.getZ());
-        int yStart = MathHelper.floor(target.getY() + target.getHeight() + 0.5d);
+        int baseY = MathHelper.floor(target.getY());
+        int scanTop = baseY + 32;
+        int radius = MathHelper.ceil(DROP_HORIZONTAL_TOLERANCE);
         BlockPos.Mutable cursor = new BlockPos.Mutable();
-        int topObstruction = -1;
-        for (int dy = 0; dy < OBSTRUCTION_SCAN_HEIGHT; dy++) {
-            int y = yStart + dy;
-            cursor.set(tx, y, tz);
-            BlockState state = world.getBlockState(cursor);
-            if (state.isAir()) {
-                continue;
+        int maxBlockTop = baseY;
+        for (int ox = -radius; ox <= radius; ox++) {
+            for (int oz = -radius; oz <= radius; oz++) {
+                for (int checkY = scanTop; checkY >= baseY; checkY--) {
+                    cursor.set(tx + ox, checkY, tz + oz);
+                    BlockState state = world.getBlockState(cursor);
+                    if (!state.isAir() && !state.getCollisionShape(world, cursor).isEmpty()) {
+                        if (checkY + 1 > maxBlockTop) {
+                            maxBlockTop = checkY + 1;
+                        }
+                        break;
+                    }
+                }
             }
-            if (state.getCollisionShape(world, cursor).isEmpty()) {
-                continue;
-            }
-            topObstruction = y;
         }
-        if (topObstruction >= 0) {
-            return topObstruction + 1 + DROP_HEIGHT_TARGET;
-        }
-        return target.getY() + DROP_HEIGHT_TARGET;
+        return maxBlockTop + DROP_HEIGHT_TARGET;
     }
 
     private LivingEntity acquireBestTarget() {
