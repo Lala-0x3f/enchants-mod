@@ -1,7 +1,9 @@
 package com.example.autoenchants.entity;
 
 import com.example.autoenchants.AutoEnchantsMod;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.ItemEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.SwimGoal;
@@ -21,11 +23,10 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
 
 import java.util.Comparator;
@@ -41,11 +42,19 @@ import java.util.List;
 public class BomberAllayEntity extends AllayEntity {
     private static final double TNT_SEARCH_RANGE = 96.0d;
     private static final double TARGET_SEARCH_RANGE = 192.0d;
+    /** 单个悦灵主手上可携带的 TNT 上限。 */
+    private static final int MAX_HELD_TNT = 8;
+    /** 目标评分随机扰动范围：足以让不同悦灵选不同目标，但小于 RaiderEntity 优先加成。 */
+    private static final double TARGET_SCORE_NOISE = 100.0d;
     private static final double DROP_HEIGHT_TARGET = 9.5d;
-    private static final double DROP_HEIGHT_MIN = 8.5d;
-    private static final double DROP_HEIGHT_MAX = 11.5d;
+    private static final double DROP_HEIGHT_MIN = 6.5d;
     private static final double DROP_HORIZONTAL_TOLERANCE = 1.2d;
-    private static final int BOMB_COOLDOWN_TICKS = 30;
+    /** 在目标正上方扫描方块的最大距离，用于判断是否需要先炸毁顶上的方块。 */
+    private static final int OBSTRUCTION_SCAN_HEIGHT = 16;
+    private static final int BOMB_COOLDOWN_TICKS = 60;
+    /** 刚炸过的目标在多久内会被评分惩罚，使下一枚 TNT 优先投到别的目标。 */
+    private static final int RECENT_BOMB_AVOID_TICKS = 100;
+    private static final double RECENT_BOMB_PENALTY = 150.0d;
     /** 重新发起寻路的最短间隔，避免每 tick 都重算路径。 */
     private static final int REPATH_INTERVAL = 10;
     /** 扫描到有效目标/物品后的刷新间隔。 */
@@ -61,6 +70,8 @@ public class BomberAllayEntity extends AllayEntity {
     private int repathCooldown;
     private LivingEntity currentTarget;
     private ItemEntity currentTntItem;
+    private java.util.UUID lastBombedTargetUuid;
+    private int lastBombedTargetCooldown;
 
     public BomberAllayEntity(EntityType<? extends AllayEntity> entityType, World world) {
         super(entityType, world);
@@ -68,11 +79,14 @@ public class BomberAllayEntity extends AllayEntity {
     }
 
     private ItemStack getHeldStack() {
-        return this.getInventory().getStack(0);
+        // 使用 MobEntity 的主手装备槽：会通过 EntityEquipmentUpdateS2CPacket 自动同步到客户端，
+        // 这样客户端的 HeldItemFeatureRenderer 才能正确显示手持的 TNT。
+        // 不要使用 AllayEntity#getInventory()——SimpleInventory 仅服务端存在。
+        return this.getEquippedStack(EquipmentSlot.MAINHAND);
     }
 
     private void setHeldStack(ItemStack stack) {
-        this.getInventory().setStack(0, stack);
+        this.equipStack(EquipmentSlot.MAINHAND, stack);
     }
 
     @Override
@@ -110,6 +124,9 @@ public class BomberAllayEntity extends AllayEntity {
         if (repathCooldown > 0) {
             repathCooldown--;
         }
+        if (lastBombedTargetCooldown > 0) {
+            lastBombedTargetCooldown--;
+        }
 
         if (getHeldStack().isOf(Items.TNT)) {
             tickBombingState();
@@ -141,7 +158,8 @@ public class BomberAllayEntity extends AllayEntity {
 
         Vec3d itemPos = currentTntItem.getPos();
         // 用 Navigation 进行真正的寻路，绕开墙体；MoveControl 只能直线推进会卡墙。
-        navigateTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 1.2d);
+        // 空手状态下飞行速度提高，加快去拿 TNT 补给。
+        navigateTo(itemPos.x, itemPos.y + 0.5d, itemPos.z, 2.0d);
         this.getLookControl().lookAt(itemPos.x, itemPos.y, itemPos.z);
 
         if (this.squaredDistanceTo(currentTntItem) <= 1.5d * 1.5d) {
@@ -164,9 +182,15 @@ public class BomberAllayEntity extends AllayEntity {
         if (stack.isEmpty() || !stack.isOf(Items.TNT)) {
             return;
         }
-        setHeldStack(new ItemStack(Items.TNT, 1));
+        ItemStack held = getHeldStack();
+        int currentCount = held.isOf(Items.TNT) ? held.getCount() : 0;
+        int canTake = Math.min(stack.getCount(), MAX_HELD_TNT - currentCount);
+        if (canTake <= 0) {
+            return;
+        }
+        setHeldStack(new ItemStack(Items.TNT, currentCount + canTake));
 
-        stack.decrement(1);
+        stack.decrement(canTake);
         if (stack.isEmpty()) {
             item.discard();
         } else {
@@ -203,9 +227,11 @@ public class BomberAllayEntity extends AllayEntity {
             return;
         }
 
+        // 若目标正上方有方块阻挡，将瞄点抬高至阻挡之上：悦灵会先飞到阻挡上方投弹，
+        // 把顶上的方块炸掉清出通道，下一轮再下降至常规高度命中目标本体。
         double aimX = currentTarget.getX();
-        double aimY = currentTarget.getY() + DROP_HEIGHT_TARGET;
         double aimZ = currentTarget.getZ();
+        double aimY = resolveAimY(currentTarget);
 
         // 真正寻路（BirdNavigation 会在 3D 空间绕开方块）。
         navigateTo(aimX, aimY, aimZ, 1.3d);
@@ -219,12 +245,42 @@ public class BomberAllayEntity extends AllayEntity {
         double dz = this.getZ() - currentTarget.getZ();
         double horizontalSq = dx * dx + dz * dz;
         double dy = this.getY() - currentTarget.getY();
+        // 仅约束最低投弹高度：太低 TNT 会把悦灵自己炸到。上限不再设置——
+        // 太高时 TNT 自由落体会先撞到目标顶上的方块并爆炸（BomberTntEntity 触地即爆），
+        // 正好用来把阻挡物清掉，符合「先炸毁目标上空方块」的诉求。
         if (horizontalSq <= DROP_HORIZONTAL_TOLERANCE * DROP_HORIZONTAL_TOLERANCE
-                && dy >= DROP_HEIGHT_MIN
-                && dy <= DROP_HEIGHT_MAX
-                && hasClearDropPath(currentTarget)) {
+                && dy >= DROP_HEIGHT_MIN) {
             dropTnt();
         }
+    }
+
+    /**
+     * 解算瞄准的 Y 坐标：找到目标正上方第一格非空气方块的位置，瞄到「该方块再往上 DROP_HEIGHT_TARGET 格」；
+     * 若头顶通畅则直接 target.y + DROP_HEIGHT_TARGET。这样在被天花板罩住的目标上空也有可投弹位置。
+     */
+    private double resolveAimY(LivingEntity target) {
+        World world = this.getWorld();
+        int tx = MathHelper.floor(target.getX());
+        int tz = MathHelper.floor(target.getZ());
+        int yStart = MathHelper.floor(target.getY() + target.getHeight() + 0.5d);
+        BlockPos.Mutable cursor = new BlockPos.Mutable();
+        int topObstruction = -1;
+        for (int dy = 0; dy < OBSTRUCTION_SCAN_HEIGHT; dy++) {
+            int y = yStart + dy;
+            cursor.set(tx, y, tz);
+            BlockState state = world.getBlockState(cursor);
+            if (state.isAir()) {
+                continue;
+            }
+            if (state.getCollisionShape(world, cursor).isEmpty()) {
+                continue;
+            }
+            topObstruction = y;
+        }
+        if (topObstruction >= 0) {
+            return topObstruction + 1 + DROP_HEIGHT_TARGET;
+        }
+        return target.getY() + DROP_HEIGHT_TARGET;
     }
 
     private LivingEntity acquireBestTarget() {
@@ -272,6 +328,15 @@ public class BomberAllayEntity extends AllayEntity {
         if (currentTarget != null && currentTarget.getUuid().equals(entity.getUuid())) {
             score += 30.0d;
         }
+        // 刚炸过的目标在冷却期内被惩罚：下一枚 TNT 优先投向别的目标。
+        // 若仅有这一个可选目标，惩罚仍小于距离差异与 Raider 加成，仍会被重新选中。
+        if (lastBombedTargetCooldown > 0 && lastBombedTargetUuid != null
+                && lastBombedTargetUuid.equals(entity.getUuid())) {
+            score -= RECENT_BOMB_PENALTY;
+        }
+        // 添加随机扰动：多只悦灵同时选择时不会都锁同一个目标。每次重扫（SCAN_INTERVAL_FOUND=20t）
+        // 重新采样，配合 currentTarget 的 +30 粘性避免频繁切换。
+        score += this.random.nextDouble() * TARGET_SCORE_NOISE;
         return score;
     }
 
@@ -297,10 +362,18 @@ public class BomberAllayEntity extends AllayEntity {
         tnt.setFuse(80);
         world.spawnEntity(tnt);
 
-        held.decrement(1);
-        if (held.isEmpty()) {
-            setHeldStack(ItemStack.EMPTY);
+        // 每次只消耗 1 个 TNT；剩余数量留在主手以供后续投弹（最多携带 MAX_HELD_TNT 个）。
+        // 使用 setHeldStack 重新设置，确保 EntityEquipmentUpdateS2CPacket 同步到客户端。
+        int remaining = held.getCount() - 1;
+        setHeldStack(remaining > 0 ? new ItemStack(Items.TNT, remaining) : ItemStack.EMPTY);
+
+        // 记录刚炸的目标，下一轮选择会优先避开他；同时清除当前目标以强制重新扫描。
+        if (currentTarget != null) {
+            lastBombedTargetUuid = currentTarget.getUuid();
+            lastBombedTargetCooldown = RECENT_BOMB_AVOID_TICKS;
         }
+        currentTarget = null;
+        bombScanCooldown = 0;
 
         world.playSound(null, this.getX(), this.getY(), this.getZ(),
                 SoundEvents.ENTITY_TNT_PRIMED, SoundCategory.NEUTRAL, 0.8f, 1.2f);
@@ -317,20 +390,6 @@ public class BomberAllayEntity extends AllayEntity {
         this.velocityModified = true;
         this.getNavigation().stop();
         repathCooldown = 10;
-    }
-
-    /**
-     * 检查从悦灵到目标头顶之间是否没有方块阻挡，避免 TNT 一生成就撞到天花板/上方方块在悦灵附近爆炸。
-     */
-    private boolean hasClearDropPath(LivingEntity target) {
-        Vec3d start = new Vec3d(this.getX(), this.getY() - 0.5d, this.getZ());
-        Vec3d end = new Vec3d(target.getX(), target.getY() + target.getHeight() + 0.1d, target.getZ());
-        BlockHitResult hit = this.getWorld().raycast(new RaycastContext(
-                start, end,
-                RaycastContext.ShapeType.COLLIDER,
-                RaycastContext.FluidHandling.NONE,
-                this));
-        return hit.getType() == HitResult.Type.MISS;
     }
 
     /**
