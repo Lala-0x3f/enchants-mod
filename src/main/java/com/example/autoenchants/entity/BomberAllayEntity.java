@@ -110,15 +110,8 @@ public class BomberAllayEntity extends AllayEntity {
         this.equipStack(EquipmentSlot.MAINHAND, stack);
     }
 
-    /**
-     * 阻止原版 Allay 的自动拾取行为。
-     * 投弹悦灵只能通过 tickPickupState 中的 tryPickupTnt 方法拾取 TNT，且严格限制 8 个上限。
-     */
-    @Override
-    protected void pickUpItem(ServerWorld world, ItemEntity item) {
-        // 完全阻止原版拾取逻辑，所有拾取由 tickPickupState 中的自定义逻辑控制
-        return;
-    }
+    // 注：原版 Allay 的自动拾取已通过构造器中的 setCanPickUpLoot(false) 关闭。
+    // 所有 TNT 拾取由 tickPickupState -> tryPickupTnt 自定义逻辑控制，严格限制 8 个上限。
 
     @Override
     protected void initGoals() {
