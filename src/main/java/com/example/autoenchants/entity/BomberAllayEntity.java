@@ -123,7 +123,13 @@ public class BomberAllayEntity extends AllayEntity {
     }
 
     @Override
+    public boolean canGather(ItemStack stack) {
+        return false;
+    }
+
+    @Override
     public void tick() {
+        this.setCanPickUpLoot(false);
         super.tick();
 
         if (this.getWorld().isClient()) {
@@ -132,6 +138,7 @@ public class BomberAllayEntity extends AllayEntity {
 
         // 强制检查：手上TNT超过8个时丢弃多余部分
         enforceHeldTntLimit();
+        drainInternalInventoryToMainHandLimit();
 
         if (bombCooldown > 0) {
             bombCooldown--;
@@ -152,10 +159,13 @@ public class BomberAllayEntity extends AllayEntity {
             lastBombedTargetCooldown--;
         }
 
-        if (getHeldStack().isOf(Items.TNT)) {
-            tickBombingState();
-        } else {
+        ItemStack held = getHeldStack();
+        if (!held.isOf(Items.TNT)) {
             tickPickupState();
+        } else if (held.getCount() < MAX_HELD_TNT && hasPickupTarget()) {
+            tickPickupState();
+        } else {
+            tickBombingState();
         }
     }
 
@@ -201,6 +211,26 @@ public class BomberAllayEntity extends AllayEntity {
         this.getWorld().spawnEntity(itemEntity);
     }
 
+    private void drainInternalInventoryToMainHandLimit() {
+        ItemStack internal = this.getInventory().getStack(0);
+        if (internal.isEmpty()) {
+            return;
+        }
+        int excess = 0;
+        if (internal.isOf(Items.TNT)) {
+            ItemStack held = getHeldStack();
+            int currentCount = held.isOf(Items.TNT) ? held.getCount() : 0;
+            int canMove = Math.min(internal.getCount(), MAX_HELD_TNT - currentCount);
+            if (canMove > 0) {
+                setHeldStack(new ItemStack(Items.TNT, currentCount + canMove));
+            }
+            excess = internal.getCount() - canMove;
+        }
+        this.getInventory().setStack(0, ItemStack.EMPTY);
+        spawnExcessTnt(excess);
+        enforceHeldTntLimit();
+    }
+
     /* ---------------- Pickup state ---------------- */
 
     private void tickPickupState() {
@@ -212,8 +242,7 @@ public class BomberAllayEntity extends AllayEntity {
         }
 
         // 当前物品丢失（被别人拾走/衰减）时立即允许重扫。
-        if (currentTntItem != null && (!currentTntItem.isAlive()
-                || !currentTntItem.getStack().isOf(Items.TNT))) {
+        if (currentTntItem != null && !isValidTntItem(currentTntItem)) {
             currentTntItem = null;
             pickupScanCooldown = 0;
         }
@@ -244,10 +273,33 @@ public class BomberAllayEntity extends AllayEntity {
     private ItemEntity findNearestTntItem() {
         Box box = this.getBoundingBox().expand(TNT_SEARCH_RANGE);
         List<ItemEntity> candidates = this.getWorld().getEntitiesByClass(ItemEntity.class, box,
-                e -> e.isAlive() && !e.cannotPickup() && e.getStack().isOf(Items.TNT));
+                this::isValidTntItem);
         return candidates.stream()
                 .min(Comparator.comparingDouble(this::squaredDistanceTo))
                 .orElse(null);
+    }
+
+    private boolean hasPickupTarget() {
+        if (currentTntItem != null && isValidTntItem(currentTntItem)) {
+            return true;
+        }
+        if (pickupScanCooldown > 0) {
+            return false;
+        }
+        currentTntItem = findNearestTntItem();
+        pickupScanCooldown = (currentTntItem != null) ? SCAN_INTERVAL_FOUND : SCAN_INTERVAL_EMPTY;
+        return currentTntItem != null;
+    }
+
+    private boolean isValidTntItem(ItemEntity item) {
+        if (!item.isAlive() || item.cannotPickup() || !item.getStack().isOf(Items.TNT)) {
+            return false;
+        }
+        BlockPos pos = item.getBlockPos();
+        if (!this.getWorld().getFluidState(pos).isEmpty()) {
+            return false;
+        }
+        return this.getWorld().getFluidState(pos.up()).isEmpty();
     }
 
     private void tryPickupTnt(ItemEntity item) {
