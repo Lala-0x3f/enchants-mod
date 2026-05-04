@@ -44,14 +44,14 @@ public abstract class FireworkRocketEntityMixin {
     private static final String SHULKER_BULLET_FX_TAG = "autoenchants_firework_shulker_bullet_fx";
     private static final String BLAST_LAUNCHED_TNT_TAG = "autoenchants_blast_launched_tnt";
     private static final String BLAST_LAUNCHED_CREEPER_TAG = "autoenchants_blast_launched_creeper";
-    private static final int GUIDANCE_DELAY_TICKS = 5;
+    private static final int GUIDANCE_DELAY_TICKS = 1;
     private static final int GUIDANCE_REFRESH_INTERVAL = 18;
     private static final int GUIDANCE_REACQUIRE_INTERVAL = 4;
     private static final int GUIDANCE_LOCKED_CHECK_INTERVAL = 6;
-    private static final float GUIDANCE_MAX_TURN_DEGREES = 1.0f;
+    private static final float GUIDANCE_MAX_TURN_DEGREES = 3.0f;
     private static final double GUIDANCE_CONE_RANGE = 42.0d;
-    private static final double GUIDANCE_CONE_HALF_ANGLE = 45.0d;
-    private static final double GUIDANCE_MAX_TRACK_HALF_ANGLE = 80.0d;
+    private static final double GUIDANCE_CONE_HALF_ANGLE = 35.0d;
+    private static final double GUIDANCE_MAX_TRACK_HALF_ANGLE = 40.0d;
 
     private int autoenchants$guidanceAge;
     private int autoenchants$nextAcquireTick;

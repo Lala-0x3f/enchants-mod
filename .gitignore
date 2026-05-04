@@ -7,3 +7,4 @@ bin/
 gradle-*/
 .serena/
 /.ace-tool
+/.gradle-user-home/

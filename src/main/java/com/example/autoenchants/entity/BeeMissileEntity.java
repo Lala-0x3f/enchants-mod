@@ -98,8 +98,12 @@ public class BeeMissileEntity extends BeeEntity {
 
     @Override
     protected void initGoals() {
-        // 不使用蜜蜂的常规 AI（采蜜、回巢、攻击等），由本类 tick 状态机驱动
-        // 但 BeeFlyNavigation 仍可用，用于寻路绕障
+        // 必须调用 super.initGoals() 以初始化 BeeEntity.pollinateGoal 等字段，
+        // 否则 BeeEntity 的自定义 BirdNavigation$1.tick() 会因 pollinateGoal == null 而 NPE 崩溃。
+        // 初始化完毕后立即清空所有 Goal，蜜蜂的采蜜/回巢/攻击 AI 不会实际运行。
+        super.initGoals();
+        this.goalSelector.clear(g -> true);
+        this.targetSelector.clear(g -> true);
     }
 
     @Override

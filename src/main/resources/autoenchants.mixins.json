@@ -12,6 +12,7 @@
     "FireworkRocketEntityMixin",
     "LivingEntityMixin",
     "MobEntityAccessor",
+    "PersistentProjectileEntityAccessor",
     "ShulkerBulletEntityMixin",
     "TntEntityMixin",
     "TridentEntityMixin"
