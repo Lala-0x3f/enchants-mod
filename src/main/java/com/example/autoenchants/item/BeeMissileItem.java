@@ -44,7 +44,7 @@ public class BeeMissileItem extends Item {
             double spawnZ = eye.z + look.z * 0.6d;
             missile.refreshPositionAndAngles(spawnX, spawnY, spawnZ, user.getYaw(), user.getPitch());
             missile.setOwner(user);
-            missile.setInitialDirection(look, THROW_SPEED);
+            missile.setInitialDirection(look, THROW_SPEED, user.getVelocity());
             world.spawnEntity(missile);
         }
 

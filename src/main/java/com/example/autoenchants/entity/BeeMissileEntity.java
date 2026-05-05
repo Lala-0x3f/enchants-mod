@@ -1,6 +1,5 @@
 package com.example.autoenchants.entity;
 
-import net.minecraft.entity.AreaEffectCloudEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
@@ -36,7 +35,7 @@ import java.util.UUID;
  *  - 之后开始制导：在飞行方向 40 度半角圆锥内寻敌（参考精确制导附魔），优先灾厄村民；可锁定飞行怪物。
  *  - 锁定后使用蜜蜂的 BeeFlyNavigation 寻路（继承自 BeeEntity），可绕开障碍物。
  *  - 飞行中持续产生轨迹粒子。
- *  - 撞击敌人后：2 级爆炸 + 大量粒子（参考反应装甲附魔）+ 留下区域效果云（中毒）。
+ *  - 撞击敌人后：2 级爆炸 + 大量粒子（参考反应装甲附魔）+ 范围中毒。
  */
 public class BeeMissileEntity extends BeeEntity {
 
@@ -58,9 +57,7 @@ public class BeeMissileEntity extends BeeEntity {
     private static final double HOVER_WAYPOINT_REACH_SQ = 1.5d * 1.5d;
     /** 直接撞击碰撞箱外扩，避免高速穿透。 */
     private static final double COLLISION_INFLATE = 0.15d;
-    /** 区域效果云参数 */
-    private static final float CLOUD_RADIUS = 3.0f;
-    private static final int CLOUD_DURATION_TICKS = 100;
+    private static final double POISON_RADIUS = 3.0d;
     private static final int POISON_DURATION_TICKS = 100;
     private static final int POISON_AMPLIFIER = 1;
     /** 爆炸威力（2 级）。 */
@@ -71,6 +68,7 @@ public class BeeMissileEntity extends BeeEntity {
     @Nullable
     private UUID targetUuid;
     private Vec3d initialDir = Vec3d.ZERO;
+    private Vec3d ballisticVelocity = Vec3d.ZERO;
     /** 自定义计时器，避免与父类 age 冲突。 */
     private int missileAge;
     private int repathCooldown;
@@ -120,12 +118,17 @@ public class BeeMissileEntity extends BeeEntity {
     }
 
     public void setInitialDirection(Vec3d look, double speed) {
+        setInitialDirection(look, speed, Vec3d.ZERO);
+    }
+
+    public void setInitialDirection(Vec3d look, double speed, Vec3d inheritedVelocity) {
         if (look.lengthSquared() < 1.0E-6d) {
             this.initialDir = new Vec3d(0, 1, 0);
         } else {
             this.initialDir = look.normalize();
         }
-        Vec3d v = this.initialDir.multiply(speed);
+        Vec3d v = this.initialDir.multiply(speed).add(inheritedVelocity);
+        this.ballisticVelocity = v;
         this.setVelocity(v);
         this.velocityModified = true;
         // 朝向初速方向
@@ -175,7 +178,7 @@ public class BeeMissileEntity extends BeeEntity {
 
         // 速度矢量在 super.tick() 之后强制覆盖，防止 BeeEntity BeeMoveControl 干扰。
         if (missileAge <= PRE_GUIDANCE_TICKS) {
-            this.setVelocity(initialDir.multiply(BALLISTIC_SPEED));
+            this.setVelocity(ballisticVelocity.lengthSquared() > 1.0E-6d ? ballisticVelocity : initialDir.multiply(BALLISTIC_SPEED));
             this.velocityModified = true;
         } else if (homingTarget != null) {
             tickHoming(homingTarget, preTickVel);
@@ -385,16 +388,20 @@ public class BeeMissileEntity extends BeeEntity {
         sw.spawnParticles(ParticleTypes.FLAME, getX(), getY(), getZ(), 18, 0.5d, 0.35d, 0.5d, 0.03d);
         sw.spawnParticles(ParticleTypes.SMOKE, getX(), getY(), getZ(), 16, 0.5d, 0.4d, 0.5d, 0.04d);
 
-        // 区域效果云：中毒
-        AreaEffectCloudEntity cloud = new AreaEffectCloudEntity(sw, getX(), getY(), getZ());
-        if (owner instanceof LivingEntity lo) cloud.setOwner(lo);
-        cloud.setRadius(CLOUD_RADIUS);
-        cloud.setDuration(CLOUD_DURATION_TICKS);
-        cloud.setRadiusOnUse(-0.2f);
-        cloud.setRadiusGrowth(-cloud.getRadius() / (float) cloud.getDuration());
-        cloud.addEffect(new StatusEffectInstance(StatusEffects.POISON, POISON_DURATION_TICKS, POISON_AMPLIFIER));
-        cloud.setParticleType(net.minecraft.particle.ParticleTypes.ENTITY_EFFECT);
-        sw.spawnEntity(cloud);
+        List<LivingEntity> poisonTargets = sw.getEntitiesByClass(
+                LivingEntity.class,
+                new Box(getX() - POISON_RADIUS, getY() - POISON_RADIUS, getZ() - POISON_RADIUS,
+                        getX() + POISON_RADIUS, getY() + POISON_RADIUS, getZ() + POISON_RADIUS),
+                e -> e.isAlive()
+                        && !e.isSpectator()
+                        && e != owner
+                        && e != this
+                        && isValidTarget(e)
+                        && e.squaredDistanceTo(this) <= POISON_RADIUS * POISON_RADIUS
+        );
+        for (LivingEntity target : poisonTargets) {
+            target.addStatusEffect(new StatusEffectInstance(StatusEffects.POISON, POISON_DURATION_TICKS, POISON_AMPLIFIER), owner);
+        }
 
         this.discard();
     }
@@ -438,6 +445,9 @@ public class BeeMissileEntity extends BeeEntity {
         nbt.putDouble("InitDirX", initialDir.x);
         nbt.putDouble("InitDirY", initialDir.y);
         nbt.putDouble("InitDirZ", initialDir.z);
+        nbt.putDouble("BallisticVelX", ballisticVelocity.x);
+        nbt.putDouble("BallisticVelY", ballisticVelocity.y);
+        nbt.putDouble("BallisticVelZ", ballisticVelocity.z);
         if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
         if (targetUuid != null) nbt.putUuid("Target", targetUuid);
         if (hoverAnchor != null) {
@@ -453,6 +463,7 @@ public class BeeMissileEntity extends BeeEntity {
         super.readCustomDataFromNbt(nbt);
         missileAge = nbt.getInt("MissileAge");
         initialDir = new Vec3d(nbt.getDouble("InitDirX"), nbt.getDouble("InitDirY"), nbt.getDouble("InitDirZ"));
+        ballisticVelocity = new Vec3d(nbt.getDouble("BallisticVelX"), nbt.getDouble("BallisticVelY"), nbt.getDouble("BallisticVelZ"));
         if (nbt.containsUuid("Owner")) ownerUuid = nbt.getUuid("Owner");
         if (nbt.containsUuid("Target")) targetUuid = nbt.getUuid("Target");
         if (nbt.contains("HoverX")) {
