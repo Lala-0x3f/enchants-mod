@@ -47,8 +47,6 @@ public class BeeMissileEntity extends BeeEntity {
     private static final double CONE_HALF_ANGLE_DEG = 40.0d;
     /** 弹道阶段速度（每 tick 位移 ≈ 1.4 格）。 */
     private static final double BALLISTIC_SPEED = 1.4d;
-    /** 锁定后冲向敌人的飞行速度乘数（用于 Navigation.startMovingTo）。 */
-    private static final double HOMING_NAV_SPEED = 2.5d;
     /** 盘旋半径。 */
     private static final double HOVER_RADIUS = 4.0d;
     /** 盘旋飞行速度乘数。 */
@@ -152,13 +150,20 @@ public class BeeMissileEntity extends BeeEntity {
             return; // 已 discard，避免对已移除实体调用 super.tick
         }
 
+        // 保存 super.tick() 前的速度用于平滑转向（BeeMoveControl 会在 super.tick() 内修改速度）。
+        Vec3d preTickVel = this.getVelocity();
+        LivingEntity homingTarget = null;
+
         if (missileAge <= PRE_GUIDANCE_TICKS) {
-            // 弹道阶段：禁用导航，按初速度匀速直飞。
+            // 弹道阶段：禁用导航。
             this.getNavigation().stop();
-            this.setVelocity(initialDir.multiply(BALLISTIC_SPEED));
-            this.velocityModified = true;
-        } else {
-            tickGuidance();
+        } else if (this.getWorld() instanceof ServerWorld sw) {
+            homingTarget = resolveOrAcquireTarget(sw);
+            if (homingTarget != null) {
+                this.getNavigation().stop(); // 归航模式：直接控制速度矢量
+            } else {
+                tickHover(); // 盘旋模式：在 super.tick() 前设置导航目标
+            }
         }
 
         spawnTrailParticles();
@@ -168,6 +173,15 @@ public class BeeMissileEntity extends BeeEntity {
 
         if (exploded || this.isRemoved()) return;
 
+        // 速度矢量在 super.tick() 之后强制覆盖，防止 BeeEntity BeeMoveControl 干扰。
+        if (missileAge <= PRE_GUIDANCE_TICKS) {
+            this.setVelocity(initialDir.multiply(BALLISTIC_SPEED));
+            this.velocityModified = true;
+        } else if (homingTarget != null) {
+            tickHoming(homingTarget, preTickVel);
+        }
+        // 盘旋模式：由 navigation 控制速度，无需手动设置。
+
         // 位移完成后再判定碰撞：撞墙必爆，撞到合法敌人也爆。
         if (this.horizontalCollision || this.verticalCollision) {
             explode();
@@ -176,12 +190,11 @@ public class BeeMissileEntity extends BeeEntity {
         }
     }
 
-    private void tickGuidance() {
-        if (!(this.getWorld() instanceof ServerWorld sw)) return;
-
+    @Nullable
+    private LivingEntity resolveOrAcquireTarget(ServerWorld sw) {
         LivingEntity target = resolveTarget(sw);
         if (target == null) {
-            // 未锁定时：未盘旋 → 按飞行方向锥形搜；已盘旋 → 全周搜。
+            // 未锁定时：未盘旋 → 按发射方向锥形搜；已盘旋 → 全周搜。
             double halfAngle = (hoverAnchor == null) ? CONE_HALF_ANGLE_DEG : 180.0d;
             target = acquireTarget(sw, halfAngle);
             if (target != null) {
@@ -189,27 +202,26 @@ public class BeeMissileEntity extends BeeEntity {
                 hoverAnchor = null; // 锁定后退出盘旋
             }
         }
-
-        if (target != null) {
-            tickHoming(target);
-        } else {
-            tickHover();
-        }
+        return target;
     }
 
-    private void tickHoming(LivingEntity target) {
-        // 使用蜜蜂的飞行导航绕开障碍物
-        if (repathCooldown <= 0 || this.getNavigation().isIdle()) {
-            this.getNavigation().startMovingTo(
-                    target.getX(),
-                    target.getY() + target.getHeight() * 0.5d,
-                    target.getZ(),
-                    HOMING_NAV_SPEED
-            );
-            repathCooldown = REPATH_INTERVAL;
-        } else {
-            repathCooldown--;
+    private void tickHoming(LivingEntity target, Vec3d preTickVel) {
+        // super.tick() 之后调用：速度矢量直接设置，覆盖 BeeMoveControl 对速度的干扰。
+        Vec3d toTarget = target.getPos()
+                .add(0.0d, target.getHeight() * 0.5d, 0.0d)
+                .subtract(this.getPos());
+        double dist = toTarget.length();
+        if (dist < 0.3d) {
+            explode();
+            return;
         }
+        Vec3d desired = toTarget.normalize();
+        // 用 super.tick() 前保存的速度作为平滑转向基准，避免 MoveControl 污染方向。
+        Vec3d sum = preTickVel.lengthSquared() > 1.0E-6d
+                ? preTickVel.normalize().add(desired) : desired;
+        Vec3d steer = sum.lengthSquared() > 1.0E-6d ? sum.normalize() : desired;
+        this.setVelocity(steer.multiply(BALLISTIC_SPEED));
+        this.velocityModified = true;
         this.getLookControl().lookAt(target, 60.0f, 60.0f);
     }
 
@@ -258,8 +270,10 @@ public class BeeMissileEntity extends BeeEntity {
     private LivingEntity acquireTarget(ServerWorld sw, double coneHalfAngleDeg) {
         // half-angle >= 180 表示全周搜，不需方向向量。
         boolean omnidirectional = coneHalfAngleDeg >= 180.0d - 1.0E-6d;
-        Vec3d vel = this.getVelocity();
-        Vec3d forward = vel.lengthSquared() > 1.0E-6d ? vel.normalize() : initialDir;
+        // 以发射时的初始方向作为锥形轴：比实时速度矢量更可靠，不受 BeeMoveControl 干扰。
+        Vec3d forward = initialDir.lengthSquared() > 1.0E-6d
+                ? initialDir
+                : (this.getVelocity().lengthSquared() > 1.0E-6d ? this.getVelocity().normalize() : Vec3d.ZERO);
         if (!omnidirectional && forward.lengthSquared() < 1.0E-6d) return null;
 
         double cosThreshold = Math.cos(Math.toRadians(coneHalfAngleDeg));
