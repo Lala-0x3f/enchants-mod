@@ -60,8 +60,8 @@ public class BeeMissileEntity extends BeeEntity {
     private static final double POISON_RADIUS = 3.0d;
     private static final int POISON_DURATION_TICKS = 100;
     private static final int POISON_AMPLIFIER = 1;
-    /** 爆炸威力（2 级）。 */
-    private static final float EXPLOSION_POWER = 2.0f;
+    /** 爆炸威力（4 级，相当于 TNT）。 */
+    private static final float EXPLOSION_POWER = 4.0f;
 
     @Nullable
     private UUID ownerUuid;
@@ -372,7 +372,20 @@ public class BeeMissileEntity extends BeeEntity {
         ServerWorld sw = (ServerWorld) this.getWorld();
         Entity owner = getOwnerEntity();
 
-        // 2 级爆炸
+        // 爆炸前先收集中毒目标：爆炸冲击波会将实体推出范围，若在爆炸后再查询会导致距离检查失败。
+        List<LivingEntity> poisonTargets = sw.getEntitiesByClass(
+                LivingEntity.class,
+                new Box(getX() - POISON_RADIUS, getY() - POISON_RADIUS, getZ() - POISON_RADIUS,
+                        getX() + POISON_RADIUS, getY() + POISON_RADIUS, getZ() + POISON_RADIUS),
+                e -> e.isAlive()
+                        && !e.isSpectator()
+                        && e != owner
+                        && e != this
+                        && isValidTarget(e)
+                        && e.squaredDistanceTo(this) <= POISON_RADIUS * POISON_RADIUS
+        );
+
+        // 爆炸
         this.getWorld().createExplosion(
                 owner != null ? owner : this,
                 getX(), getY(), getZ(),
@@ -388,19 +401,10 @@ public class BeeMissileEntity extends BeeEntity {
         sw.spawnParticles(ParticleTypes.FLAME, getX(), getY(), getZ(), 18, 0.5d, 0.35d, 0.5d, 0.03d);
         sw.spawnParticles(ParticleTypes.SMOKE, getX(), getY(), getZ(), 16, 0.5d, 0.4d, 0.5d, 0.04d);
 
-        List<LivingEntity> poisonTargets = sw.getEntitiesByClass(
-                LivingEntity.class,
-                new Box(getX() - POISON_RADIUS, getY() - POISON_RADIUS, getZ() - POISON_RADIUS,
-                        getX() + POISON_RADIUS, getY() + POISON_RADIUS, getZ() + POISON_RADIUS),
-                e -> e.isAlive()
-                        && !e.isSpectator()
-                        && e != owner
-                        && e != this
-                        && isValidTarget(e)
-                        && e.squaredDistanceTo(this) <= POISON_RADIUS * POISON_RADIUS
-        );
         for (LivingEntity target : poisonTargets) {
-            target.addStatusEffect(new StatusEffectInstance(StatusEffects.POISON, POISON_DURATION_TICKS, POISON_AMPLIFIER), owner);
+            if (target.isAlive()) {
+                target.addStatusEffect(new StatusEffectInstance(StatusEffects.POISON, POISON_DURATION_TICKS, POISON_AMPLIFIER), owner);
+            }
         }
 
         this.discard();
