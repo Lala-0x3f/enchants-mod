@@ -41,7 +41,7 @@ public class BeeMissileEntity extends BeeEntity {
 
     private static final int PRE_GUIDANCE_TICKS = 5;
     private static final int MAX_LIFETIME_TICKS = 200;
-    private static final double SEARCH_RANGE = 40.0d;
+    private static final double SEARCH_RANGE = 80.0d;
     /** 制导寻敌锥形半角（参考精确制导附魔 45°，按需求改为 40°）。 */
     private static final double CONE_HALF_ANGLE_DEG = 40.0d;
     /** 弹道阶段速度（每 tick 位移 ≈ 1.4 格）。 */
