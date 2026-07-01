@@ -8,3 +8,4 @@ gradle-*/
 .serena/
 /.ace-tool
 /.gradle-user-home/
+.claude/settings.local.json

@@ -5,6 +5,7 @@ import com.example.autoenchants.enchant.AutomaticEnchantment;
 import com.example.autoenchants.enchant.BlastFireworkEnchantment;
 import com.example.autoenchants.enchant.CriticalFangsEnchantment;
 import com.example.autoenchants.enchant.ExplosiveTridentEnchantment;
+import com.example.autoenchants.enchant.FastElytraEnchantment;
 import com.example.autoenchants.enchant.FireworkCreeperEnchantment;
 import com.example.autoenchants.enchant.FireworkGolemEnchantment;
 import com.example.autoenchants.enchant.FireworkShulkerEnchantment;
@@ -103,6 +104,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Enchantment RETRO_BOOTS;
     public static Enchantment EXPLOSIVE_TRIDENT;
     public static Enchantment AIRBURST_TRIDENT;
+    public static Enchantment FAST_ELYTRA;
     public static Item TARGET_POINTER;
     public static Item PEEKABOO_SHELL_SPAWN_EGG;
     public static Item SQUID_MISSILE_ITEM;
@@ -338,6 +340,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new AirburstTridentEnchantment()
         );
 
+        FAST_ELYTRA = Registry.register(
+                Registries.ENCHANTMENT,
+                id("fast_elytra"),
+                new FastElytraEnchantment()
+        );
+
         TARGET_POINTER = Registry.register(
                 Registries.ITEM,
                 id("target_pointer"),
@@ -479,7 +487,7 @@ public class AutoEnchantsMod implements ModInitializer {
                 PRECISE_SHOOTER, AUTOMATIC, TRIPLE_BURST,
                 BLAST_FIREWORK, FIREWORK_SHULKER, FIREWORK_GOLEM, FIREWORK_CREEPER, FIREWORK_VEX,
                 PRECISE_GUIDANCE,
-                CRITICAL_FANGS, SKY_BOMBARD, EXPLOSIVE_TRIDENT, AIRBURST_TRIDENT,
+                CRITICAL_FANGS, SKY_BOMBARD, EXPLOSIVE_TRIDENT, AIRBURST_TRIDENT, FAST_ELYTRA,
                 THERMAL_HELMET, SQUID_IRON_FIST, REACTION_ARMOR,
                 GUIDANCE, REQUIEM, STRANGE_WAND, RETRO_BOOTS
         };

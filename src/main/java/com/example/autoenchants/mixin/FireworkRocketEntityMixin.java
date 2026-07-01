@@ -2,16 +2,20 @@ package com.example.autoenchants.mixin;
 
 import com.example.autoenchants.AutoEnchantsMod;
 import com.example.autoenchants.LockedOnHandler;
+import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.TntEntity;
 import net.minecraft.entity.mob.CreeperEntity;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.entity.mob.PhantomEntity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.passive.IronGolemEntity;
 import net.minecraft.entity.projectile.FireworkRocketEntity;
 import net.minecraft.entity.projectile.ShulkerBulletEntity;
+import net.minecraft.item.ItemStack;
 import net.minecraft.block.Blocks;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
@@ -111,6 +115,36 @@ public abstract class FireworkRocketEntityMixin {
         if (autoenchants$guidanceAge % GUIDANCE_REFRESH_INTERVAL == 0 && autoenchants$targetIsLocked) {
             LockedOnHandler.applyLockedAndGlow(target, 20);
         }
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void autoenchants$fastElytraBoost(CallbackInfo ci) {
+        FireworkRocketEntity self = (FireworkRocketEntity) (Object) this;
+        if (!self.wasShotAtAngle()) {
+            return;
+        }
+        Entity owner = self.getOwner();
+        if (!(owner instanceof PlayerEntity player)) {
+            return;
+        }
+        if (!player.isFallFlying()) {
+            return;
+        }
+        if (player.isSneaking()) {
+            return;
+        }
+        if (player.getVehicle() != self) {
+            return;
+        }
+        ItemStack chestStack = player.getEquippedStack(EquipmentSlot.CHEST);
+        int level = EnchantmentHelper.getLevel(AutoEnchantsMod.FAST_ELYTRA, chestStack);
+        if (level <= 0) {
+            return;
+        }
+        Vec3d rotation = player.getRotationVec(1.0f);
+        Vec3d velocity = player.getVelocity();
+        double boost = 0.15 * level;
+        player.setVelocity(velocity.add(rotation.x * boost, rotation.y * boost, rotation.z * boost));
     }
 
     private void autoenchants$detonateBlastIfTagged() {
