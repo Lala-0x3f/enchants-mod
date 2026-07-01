@@ -4,6 +4,7 @@ import com.example.autoenchants.client.render.ArmorPiercingArrowEntityRenderer;
 import com.example.autoenchants.client.render.PeekabooShellEntityRenderer;
 import com.example.autoenchants.client.render.PeekabooSparkEntityRenderer;
 import com.example.autoenchants.client.render.SquidMissileEntityRenderer;
+import com.example.autoenchants.client.render.StingerMissileEntityRenderer;
 import com.example.autoenchants.client.render.SuperGolemSnowballEntityRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
@@ -25,6 +26,7 @@ public class AutoEnchantsClient implements ClientModInitializer {
         EntityRendererRegistry.register(AutoEnchantsMod.SUPER_SNOW_GOLEM, SnowGolemEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_ALLAY, AllayEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BEE_MISSILE, BeeEntityRenderer::new);
+        EntityRendererRegistry.register(AutoEnchantsMod.STINGER_MISSILE, StingerMissileEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.BOMBER_TNT, TntEntityRenderer::new);
         EntityRendererRegistry.register(AutoEnchantsMod.ARMOR_PIERCING_ARROW, ArmorPiercingArrowEntityRenderer::new);
 

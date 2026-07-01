@@ -38,6 +38,10 @@ import java.util.UUID;
  *  - 撞击敌人后：2 级爆炸 + 大量粒子（参考反应装甲附魔）+ 范围中毒。
  */
 public class BeeMissileEntity extends BeeEntity {
+    protected enum DetonationCause {
+        IMPACT,
+        EXPIRED
+    }
 
     private static final int PRE_GUIDANCE_TICKS = 5;
     private static final int MAX_LIFETIME_TICKS = 200;
@@ -73,6 +77,8 @@ public class BeeMissileEntity extends BeeEntity {
     private int missileAge;
     private int repathCooldown;
     private boolean exploded;
+    @Nullable
+    private Vec3d detonationDirectionOverride;
     /** 盘旋锚点：为 null 表示当前不处于盘旋状态。 */
     @Nullable
     private Vec3d hoverAnchor;
@@ -112,7 +118,7 @@ public class BeeMissileEntity extends BeeEntity {
     }
 
     @Nullable
-    private Entity getOwnerEntity() {
+    protected Entity getOwnerEntity() {
         if (ownerUuid == null || !(getWorld() instanceof ServerWorld sw)) return null;
         return sw.getEntity(ownerUuid);
     }
@@ -149,7 +155,7 @@ public class BeeMissileEntity extends BeeEntity {
 
         missileAge++;
         if (missileAge > MAX_LIFETIME_TICKS) {
-            explode();
+            explode(DetonationCause.EXPIRED);
             return; // 已 discard，避免对已移除实体调用 super.tick
         }
 
@@ -215,7 +221,7 @@ public class BeeMissileEntity extends BeeEntity {
                 .subtract(this.getPos());
         double dist = toTarget.length();
         if (dist < 0.3d) {
-            explode();
+            explodeToward(toTarget);
             return;
         }
         Vec3d desired = toTarget.normalize();
@@ -316,7 +322,7 @@ public class BeeMissileEntity extends BeeEntity {
         return best;
     }
 
-    private boolean isValidTarget(LivingEntity e) {
+    protected boolean isValidTarget(LivingEntity e) {
         if (e instanceof RaiderEntity) return true;
         if (e instanceof PhantomEntity) return true;
         if (e instanceof VexEntity) return true;
@@ -338,7 +344,10 @@ public class BeeMissileEntity extends BeeEntity {
                         && e instanceof LivingEntity living
                         && isValidTarget(living));
         if (!entities.isEmpty()) {
-            explode();
+            Entity hit = entities.get(0);
+            Vec3d origin = this.getPos().add(0.0d, this.getHeight() * 0.5d, 0.0d);
+            Vec3d targetCenter = hit.getPos().add(0.0d, hit.getHeight() * 0.5d, 0.0d);
+            explodeToward(targetCenter.subtract(origin));
             return true;
         }
         return false;
@@ -366,12 +375,41 @@ public class BeeMissileEntity extends BeeEntity {
         }
     }
 
-    private void explode() {
+    protected Vec3d getForwardDirection() {
+        if (detonationDirectionOverride != null && detonationDirectionOverride.lengthSquared() > 1.0E-6d) {
+            return detonationDirectionOverride.normalize();
+        }
+        Vec3d velocity = this.getVelocity();
+        if (velocity.lengthSquared() > 1.0E-6d) {
+            return velocity.normalize();
+        }
+        if (initialDir.lengthSquared() > 1.0E-6d) {
+            return initialDir.normalize();
+        }
+        return this.getRotationVec(1.0f).normalize();
+    }
+
+    protected void explode() {
+        explode(DetonationCause.IMPACT);
+    }
+
+    protected void explodeToward(Vec3d direction) {
+        if (direction.lengthSquared() > 1.0E-6d) {
+            detonationDirectionOverride = direction.normalize();
+        }
+        explode(DetonationCause.IMPACT);
+    }
+
+    protected void explode(DetonationCause cause) {
         if (exploded || this.getWorld().isClient()) return;
         exploded = true;
         ServerWorld sw = (ServerWorld) this.getWorld();
         Entity owner = getOwnerEntity();
+        onDetonate(sw, owner, cause);
+        this.discard();
+    }
 
+    protected void onDetonate(ServerWorld sw, @Nullable Entity owner, DetonationCause cause) {
         // 爆炸前先收集中毒目标：爆炸冲击波会将实体推出范围，若在爆炸后再查询会导致距离检查失败。
         List<LivingEntity> poisonTargets = sw.getEntitiesByClass(
                 LivingEntity.class,
@@ -406,8 +444,6 @@ public class BeeMissileEntity extends BeeEntity {
                 target.addStatusEffect(new StatusEffectInstance(StatusEffects.POISON, POISON_DURATION_TICKS, POISON_AMPLIFIER), owner);
             }
         }
-
-        this.discard();
     }
 
     // ==================== Damage / persistence ====================

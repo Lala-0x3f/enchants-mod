@@ -37,5 +37,9 @@
   "item.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow",
   "entity.autoenchants.armor_piercing_arrow": "Armor-Piercing Arrow",
   "item.autoenchants.bee_missile": "Bee Missile",
-  "entity.autoenchants.bee_missile": "Bee Missile"
+  "entity.autoenchants.bee_missile": "Bee Missile",
+  "item.autoenchants.stinger_missile": "Stinger Missile",
+  "item.autoenchants.stinger_missile.with_piercing": "%s (Piercing %s)",
+  "item.autoenchants.stinger_missile.piercing.tooltip": "Piercing %s",
+  "entity.autoenchants.stinger_missile": "Stinger Missile"
 }

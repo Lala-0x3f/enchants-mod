@@ -37,5 +37,9 @@
   "item.autoenchants.armor_piercing_arrow": "穿甲箭",
   "entity.autoenchants.armor_piercing_arrow": "穿甲箭",
   "item.autoenchants.bee_missile": "蜜蜂导弹",
-  "entity.autoenchants.bee_missile": "蜜蜂导弹"
+  "entity.autoenchants.bee_missile": "蜜蜂导弹",
+  "item.autoenchants.stinger_missile": "毒刺导弹",
+  "item.autoenchants.stinger_missile.with_piercing": "%s（穿透 %s）",
+  "item.autoenchants.stinger_missile.piercing.tooltip": "穿透 %s",
+  "entity.autoenchants.stinger_missile": "毒刺导弹"
 }

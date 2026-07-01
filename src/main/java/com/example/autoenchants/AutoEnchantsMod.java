@@ -30,9 +30,11 @@ import com.example.autoenchants.entity.PeekabooSparkEntity;
 import com.example.autoenchants.entity.SuperGolemSnowballEntity;
 import com.example.autoenchants.entity.SuperSnowGolemEntity;
 import com.example.autoenchants.entity.SquidMissileEntity;
+import com.example.autoenchants.entity.StingerMissileEntity;
 import com.example.autoenchants.item.ArmorPiercingArrowItem;
 import com.example.autoenchants.item.BeeMissileItem;
 import com.example.autoenchants.item.SquidMissileItem;
+import com.example.autoenchants.item.StingerMissileItem;
 import com.example.autoenchants.effect.LockedOnEffect;
 import com.example.autoenchants.effect.ReactionArmorCooldownEffect;
 import com.example.autoenchants.effect.RetroBootsCooldownEffect;
@@ -110,6 +112,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Item SQUID_MISSILE_ITEM;
     public static Item ARMOR_PIERCING_ARROW_ITEM;
     public static Item BEE_MISSILE_ITEM;
+    public static Item STINGER_MISSILE_ITEM;
     public static EntityType<ArmorPiercingArrowEntity> ARMOR_PIERCING_ARROW;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
@@ -119,6 +122,7 @@ public class AutoEnchantsMod implements ModInitializer {
     public static EntityType<BomberAllayEntity> BOMBER_ALLAY;
     public static EntityType<BomberTntEntity> BOMBER_TNT;
     public static EntityType<BeeMissileEntity> BEE_MISSILE;
+    public static EntityType<StingerMissileEntity> STINGER_MISSILE;
     public static StatusEffect LOCKED_ON;
     public static StatusEffect REACTION_ARMOR_COOLDOWN;
     public static StatusEffect SQUID_IRON_FIST_COOLDOWN;
@@ -219,6 +223,17 @@ public class AutoEnchantsMod implements ModInitializer {
                         .build()
         );
         FabricDefaultAttributeRegistry.register(BEE_MISSILE, net.minecraft.entity.passive.BeeEntity.createBeeAttributes());
+
+        STINGER_MISSILE = Registry.register(
+                Registries.ENTITY_TYPE,
+                id("stinger_missile"),
+                FabricEntityTypeBuilder.<StingerMissileEntity>create(SpawnGroup.MISC, StingerMissileEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.7f, 0.6f))
+                        .trackRangeBlocks(80)
+                        .trackedUpdateRate(2)
+                        .build()
+        );
+        FabricDefaultAttributeRegistry.register(STINGER_MISSILE, net.minecraft.entity.passive.BeeEntity.createBeeAttributes());
 
         PRECISE_SHOOTER = Registry.register(
                 Registries.ENCHANTMENT,
@@ -376,6 +391,12 @@ public class AutoEnchantsMod implements ModInitializer {
                 new BeeMissileItem(new Item.Settings().maxCount(16))
         );
 
+        STINGER_MISSILE_ITEM = Registry.register(
+                Registries.ITEM,
+                id("stinger_missile"),
+                new StingerMissileItem(new Item.Settings().maxCount(16))
+        );
+
         SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("super_snow_golem_spawn_egg"),
@@ -397,6 +418,9 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(SQUID_MISSILE_ITEM);
                             entries.add(ARMOR_PIERCING_ARROW_ITEM);
                             entries.add(BEE_MISSILE_ITEM);
+                            entries.add(StingerMissileItem.createStack(1));
+                            entries.add(StingerMissileItem.createStack(2));
+                            entries.add(StingerMissileItem.createStack(3));
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
                             entries.add(BOMBER_ALLAY_SPAWN_EGG);
@@ -437,6 +461,7 @@ public class AutoEnchantsMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(SquidIronFistHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(LockedOnHandler::tick);
         ServerTickEvents.END_SERVER_TICK.register(RetroBootsHandler::tick);
+        ServerTickEvents.END_SERVER_TICK.register(StingerMissileEntity::tickDelayedReleases);
         UseItemCallback.EVENT.register((player, world, hand) -> {
             ItemStack stack = player.getStackInHand(hand);
             if (world.isClient || !(stack.getItem() instanceof CrossbowItem)) {
