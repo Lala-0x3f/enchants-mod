@@ -41,5 +41,6 @@
   "item.autoenchants.stinger_missile": "毒刺导弹",
   "item.autoenchants.stinger_missile.with_piercing": "%s（穿透 %s）",
   "item.autoenchants.stinger_missile.piercing.tooltip": "穿透 %s",
-  "entity.autoenchants.stinger_missile": "毒刺导弹"
+  "entity.autoenchants.stinger_missile": "毒刺导弹",
+  "block.autoenchants.bee_nest_vls": "蜂巢垂发"
 }

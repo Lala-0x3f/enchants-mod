@@ -41,5 +41,6 @@
   "item.autoenchants.stinger_missile": "Stinger Missile",
   "item.autoenchants.stinger_missile.with_piercing": "%s (Piercing %s)",
   "item.autoenchants.stinger_missile.piercing.tooltip": "Piercing %s",
-  "entity.autoenchants.stinger_missile": "Stinger Missile"
+  "entity.autoenchants.stinger_missile": "Stinger Missile",
+  "block.autoenchants.bee_nest_vls": "Bee Nest VLS"
 }

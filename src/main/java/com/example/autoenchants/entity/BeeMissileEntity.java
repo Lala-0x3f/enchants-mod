@@ -3,6 +3,8 @@ package com.example.autoenchants.entity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.pathing.EntityNavigation;
+import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.boss.WitherEntity;
@@ -11,15 +13,19 @@ import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PhantomEntity;
 import net.minecraft.entity.mob.VexEntity;
 import net.minecraft.entity.passive.BeeEntity;
+import net.minecraft.entity.passive.GolemEntity;
+import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.entity.raid.RaiderEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
@@ -77,6 +83,7 @@ public class BeeMissileEntity extends BeeEntity {
     private int missileAge;
     private int repathCooldown;
     private boolean exploded;
+    private int ignoreBlockCollisionTicks;
     @Nullable
     private Vec3d detonationDirectionOverride;
     /** 盘旋锚点：为 null 表示当前不处于盘旋状态。 */
@@ -84,6 +91,16 @@ public class BeeMissileEntity extends BeeEntity {
     private Vec3d hoverAnchor;
     /** 盘旋当前角度（弧度）。 */
     private double hoverAngle;
+    /** 上一帧的视线方向，用于比例导引律计算。 */
+    @Nullable
+    private Vec3d previousLOS;
+    /** 上一帧的目标位置，用于计算目标速度。 */
+    @Nullable
+    private Vec3d previousTargetPos;
+    /** 导航比（比例导引律参数），通常取 3-5。 */
+    private static final double NAVIGATION_CONSTANT = 4.0d;
+    /** 最大转向角速度限制（弧度/tick），防止过度转向。 */
+    private static final double MAX_TURN_RATE = Math.toRadians(15.0d);
 
     public BeeMissileEntity(EntityType<? extends BeeEntity> type, World world) {
         super(type, world);
@@ -146,6 +163,20 @@ public class BeeMissileEntity extends BeeEntity {
         this.setHeadYaw(yaw);
     }
 
+    public void setPriorityTarget(@Nullable Entity target) {
+        this.targetUuid = target != null ? target.getUuid() : null;
+        if (target != null) {
+            this.hoverAnchor = null;
+            // 重置比例导引状态
+            this.previousLOS = null;
+            this.previousTargetPos = null;
+        }
+    }
+
+    public void setIgnoreBlockCollisionTicks(int ticks) {
+        this.ignoreBlockCollisionTicks = Math.max(0, ticks);
+    }
+
     @Override
     public void tick() {
         if (this.getWorld().isClient()) {
@@ -161,7 +192,7 @@ public class BeeMissileEntity extends BeeEntity {
 
         // 保存 super.tick() 前的速度用于平滑转向（BeeMoveControl 会在 super.tick() 内修改速度）。
         Vec3d preTickVel = this.getVelocity();
-        LivingEntity homingTarget = null;
+        Entity homingTarget = null;
 
         if (missileAge <= PRE_GUIDANCE_TICKS) {
             // 弹道阶段：禁用导航。
@@ -192,16 +223,19 @@ public class BeeMissileEntity extends BeeEntity {
         // 盘旋模式：由 navigation 控制速度，无需手动设置。
 
         // 位移完成后再判定碰撞：撞墙必爆，撞到合法敌人也爆。
-        if (this.horizontalCollision || this.verticalCollision) {
+        if ((this.horizontalCollision || this.verticalCollision) && ignoreBlockCollisionTicks <= 0) {
             explode();
         } else {
             checkEntityCollision();
         }
+        if (ignoreBlockCollisionTicks > 0) {
+            ignoreBlockCollisionTicks--;
+        }
     }
 
     @Nullable
-    private LivingEntity resolveOrAcquireTarget(ServerWorld sw) {
-        LivingEntity target = resolveTarget(sw);
+    private Entity resolveOrAcquireTarget(ServerWorld sw) {
+        Entity target = resolveTarget(sw);
         if (target == null) {
             // 未锁定时：未盘旋 → 按发射方向锥形搜；已盘旋 → 全周搜。
             double halfAngle = (hoverAnchor == null) ? CONE_HALF_ANGLE_DEG : 180.0d;
@@ -209,29 +243,147 @@ public class BeeMissileEntity extends BeeEntity {
             if (target != null) {
                 targetUuid = target.getUuid();
                 hoverAnchor = null; // 锁定后退出盘旋
+                // 重置比例导引状态
+                previousLOS = null;
+                previousTargetPos = null;
             }
         }
         return target;
     }
 
-    private void tickHoming(LivingEntity target, Vec3d preTickVel) {
+    private void tickHoming(Entity target, Vec3d preTickVel) {
         // super.tick() 之后调用：速度矢量直接设置，覆盖 BeeMoveControl 对速度的干扰。
-        Vec3d toTarget = target.getPos()
-                .add(0.0d, target.getHeight() * 0.5d, 0.0d)
-                .subtract(this.getPos());
+        Vec3d targetCenter = target.getPos().add(0.0d, target.getHeight() * 0.5d, 0.0d);
+        Vec3d missilePos = this.getPos();
+        Vec3d toTarget = targetCenter.subtract(missilePos);
         double dist = toTarget.length();
+
         if (dist < 0.3d) {
             explodeToward(toTarget);
             return;
         }
-        Vec3d desired = toTarget.normalize();
-        // 用 super.tick() 前保存的速度作为平滑转向基准，避免 MoveControl 污染方向。
-        Vec3d sum = preTickVel.lengthSquared() > 1.0E-6d
-                ? preTickVel.normalize().add(desired) : desired;
-        Vec3d steer = sum.lengthSquared() > 1.0E-6d ? sum.normalize() : desired;
-        this.setVelocity(steer.multiply(BALLISTIC_SPEED));
-        this.velocityModified = true;
+
+        // 如果目标是弹射物，使用比例导引律
+        if (target instanceof ProjectileEntity) {
+            Vec3d newVel = applyProportionalNavigation(target, targetCenter, missilePos, preTickVel, dist);
+            this.setVelocity(newVel);
+            this.velocityModified = true;
+        } else {
+            // 对于生物目标，使用原有的简单追踪逻辑
+            Vec3d desired = toTarget.normalize();
+            Vec3d sum = preTickVel.lengthSquared() > 1.0E-6d
+                    ? preTickVel.normalize().add(desired) : desired;
+            Vec3d steer = sum.lengthSquared() > 1.0E-6d ? sum.normalize() : desired;
+            this.setVelocity(steer.multiply(BALLISTIC_SPEED));
+            this.velocityModified = true;
+        }
+
         this.getLookControl().lookAt(target, 60.0f, 60.0f);
+    }
+
+    private Vec3d applyProportionalNavigation(Entity target, Vec3d targetCenter, Vec3d missilePos, Vec3d preTickVel, double dist) {
+        // 计算目标速度
+        Vec3d targetVelocity = Vec3d.ZERO;
+        if (previousTargetPos != null) {
+            targetVelocity = targetCenter.subtract(previousTargetPos);
+        } else if (target instanceof ProjectileEntity) {
+            targetVelocity = target.getVelocity();
+        }
+        previousTargetPos = targetCenter;
+
+        // 当前速度
+        Vec3d currentVel = preTickVel.lengthSquared() > 1.0E-6d ? preTickVel : this.getVelocity();
+        if (currentVel.lengthSquared() < 1.0E-6d) {
+            currentVel = targetCenter.subtract(missilePos).normalize().multiply(BALLISTIC_SPEED);
+        }
+
+        // 预测拦截点（简化的比例导引）
+        Vec3d interceptPoint = calculateInterceptPoint(missilePos, currentVel.length(), targetCenter, targetVelocity);
+
+        // 指向拦截点的方向
+        Vec3d toIntercept = interceptPoint.subtract(missilePos);
+        double interceptDist = toIntercept.length();
+
+        if (interceptDist < 0.3d) {
+            return currentVel.normalize().multiply(BALLISTIC_SPEED);
+        }
+
+        Vec3d desiredDir = toIntercept.normalize();
+        Vec3d currentDir = currentVel.normalize();
+
+        // 计算转向向量
+        Vec3d steering = desiredDir.subtract(currentDir);
+        double steerMag = steering.length();
+
+        // 应用转向限制
+        if (steerMag > MAX_TURN_RATE) {
+            steering = steering.normalize().multiply(MAX_TURN_RATE);
+        }
+
+        // 新方向 = 当前方向 + 转向
+        Vec3d newDir = currentDir.add(steering);
+        if (newDir.lengthSquared() < 1.0E-6d) {
+            newDir = desiredDir;
+        } else {
+            newDir = newDir.normalize();
+        }
+
+        // 近距离增强直接追踪
+        if (dist < 5.0d) {
+            Vec3d directDir = targetCenter.subtract(missilePos).normalize();
+            double blendFactor = dist / 5.0d; // 0格时=0（全直接），5格时=1（全预测）
+            newDir = newDir.multiply(blendFactor).add(directDir.multiply(1.0d - blendFactor));
+            newDir = newDir.normalize();
+        }
+
+        return newDir.multiply(BALLISTIC_SPEED);
+    }
+
+    /**
+     * 计算拦截点：求解导弹和目标相遇的位置
+     */
+    private Vec3d calculateInterceptPoint(Vec3d missilePos, double missileSpeed, Vec3d targetPos, Vec3d targetVel) {
+        // 如果目标静止或速度很慢，直接返回目标当前位置
+        double targetSpeed = targetVel.length();
+        if (targetSpeed < 0.01d) {
+            return targetPos;
+        }
+
+        // 求解拦截时间（一元二次方程）
+        Vec3d toTarget = targetPos.subtract(missilePos);
+        double a = targetVel.dotProduct(targetVel) - missileSpeed * missileSpeed;
+        double b = 2.0d * toTarget.dotProduct(targetVel);
+        double c = toTarget.dotProduct(toTarget);
+
+        double discriminant = b * b - 4.0d * a * c;
+
+        // 无解或目标太快，返回前置预测点
+        if (Math.abs(a) < 1.0E-6d || discriminant < 0.0d) {
+            // 简单预测：假设固定时间后的目标位置
+            double predictTime = toTarget.length() / missileSpeed;
+            return targetPos.add(targetVel.multiply(predictTime));
+        }
+
+        // 取较小的正根（最近的拦截时间）
+        double t1 = (-b + Math.sqrt(discriminant)) / (2.0d * a);
+        double t2 = (-b - Math.sqrt(discriminant)) / (2.0d * a);
+
+        double interceptTime;
+        if (t1 > 0.0d && t2 > 0.0d) {
+            interceptTime = Math.min(t1, t2);
+        } else if (t1 > 0.0d) {
+            interceptTime = t1;
+        } else if (t2 > 0.0d) {
+            interceptTime = t2;
+        } else {
+            // 无正解，使用简单预测
+            interceptTime = toTarget.length() / missileSpeed;
+        }
+
+        // 限制预测时间，避免过度超前
+        interceptTime = Math.min(interceptTime, 40.0d); // 最多预测40 tick
+
+        return targetPos.add(targetVel.multiply(interceptTime));
     }
 
     private void tickHover() {
@@ -265,18 +417,18 @@ public class BeeMissileEntity extends BeeEntity {
     }
 
     @Nullable
-    private LivingEntity resolveTarget(ServerWorld sw) {
+    private Entity resolveTarget(ServerWorld sw) {
         if (targetUuid == null) return null;
         Entity e = sw.getEntity(targetUuid);
-        if (e instanceof LivingEntity living && living.isAlive() && !living.isSpectator()) {
-            return living;
+        if (isValidTargetEntity(e)) {
+            return e;
         }
         targetUuid = null;
         return null;
     }
 
     @Nullable
-    private LivingEntity acquireTarget(ServerWorld sw, double coneHalfAngleDeg) {
+    private Entity acquireTarget(ServerWorld sw, double coneHalfAngleDeg) {
         // half-angle >= 180 表示全周搜，不需方向向量。
         boolean omnidirectional = coneHalfAngleDeg >= 180.0d - 1.0E-6d;
         // 以发射时的初始方向作为锥形轴：比实时速度矢量更可靠，不受 BeeMoveControl 干扰。
@@ -290,17 +442,17 @@ public class BeeMissileEntity extends BeeEntity {
         Entity owner = getOwnerEntity();
 
         Box box = this.getBoundingBox().expand(SEARCH_RANGE);
-        List<LivingEntity> candidates = sw.getEntitiesByClass(
-                LivingEntity.class,
+        List<Entity> candidates = sw.getOtherEntities(
+                this,
                 box,
-                e -> e.isAlive() && !e.isSpectator() && e != owner && e != this && isValidTarget(e)
+                e -> e != owner && isValidTargetEntity(e)
         );
 
         Vec3d origin = this.getPos();
-        LivingEntity best = null;
+        Entity best = null;
         double bestScore = -Double.MAX_VALUE;
 
-        for (LivingEntity c : candidates) {
+        for (Entity c : candidates) {
             Vec3d toC = c.getPos().add(0.0d, c.getHeight() * 0.5d, 0.0d).subtract(origin);
             double distSq = toC.lengthSquared();
             if (distSq < 1.0E-4d || distSq > rangeSq) continue;
@@ -313,6 +465,7 @@ public class BeeMissileEntity extends BeeEntity {
             if (c instanceof RaiderEntity) score += 5000.0d;
             // 飞行怪物次优先
             if (c instanceof PhantomEntity || c instanceof VexEntity) score += 1500.0d;
+            if (isValidProjectileTarget(c)) score += 2500.0d;
 
             if (score > bestScore) {
                 bestScore = score;
@@ -331,6 +484,34 @@ public class BeeMissileEntity extends BeeEntity {
         return false;
     }
 
+    protected boolean isValidTargetEntity(@Nullable Entity e) {
+        if (e == null || !e.isAlive() || e.isSpectator() || e == this || isOwner(e)) return false;
+        if (e instanceof LivingEntity living) return isValidTarget(living);
+        return isValidProjectileTarget(e);
+    }
+
+    protected boolean isValidProjectileTarget(Entity e) {
+        if (!(e instanceof ProjectileEntity)) return false;
+        if (e instanceof BeeMissileEntity || e instanceof ArmorPiercingArrowEntity) return false;
+
+        Entity projectileOwner = ((ProjectileEntity) e).getOwner();
+
+        // 排除玩家自己发射的弹射物
+        if (isOwner(projectileOwner)) return false;
+
+        // 排除友好生物发射的弹射物（雪傀儡、铁傀儡等）
+        if (projectileOwner instanceof GolemEntity) return false;
+
+        // 排除玩家发射的弹射物
+        if (projectileOwner instanceof PlayerEntity) return false;
+
+        // 排除驯服的生物发射的弹射物
+        if (projectileOwner instanceof TameableEntity tameable && tameable.isTamed()) return false;
+
+        // 其他情况：如果没有发射者或发射者是敌对生物，则视为有效目标
+        return true;
+    }
+
     private boolean checkEntityCollision() {
         if (exploded) return false;
         Vec3d vel = this.getVelocity();
@@ -338,11 +519,9 @@ public class BeeMissileEntity extends BeeEntity {
         // 仅对合法敌人引爆，避免误炸玩家、村民、动物等无辜实体。
         List<Entity> entities = this.getWorld().getOtherEntities(this, probe,
                 e -> e.isAlive()
-                        && !(e instanceof ProjectileEntity)
                         && !(e instanceof BeeMissileEntity)
                         && !isOwner(e)
-                        && e instanceof LivingEntity living
-                        && isValidTarget(living));
+                        && isValidTargetEntity(e));
         if (!entities.isEmpty()) {
             Entity hit = entities.get(0);
             Vec3d origin = this.getPos().add(0.0d, this.getHeight() * 0.5d, 0.0d);
@@ -354,7 +533,7 @@ public class BeeMissileEntity extends BeeEntity {
     }
 
     private boolean isOwner(Entity e) {
-        return ownerUuid != null && e.getUuid().equals(ownerUuid);
+        return e != null && ownerUuid != null && e.getUuid().equals(ownerUuid);
     }
 
     private void spawnTrailParticles() {
@@ -423,6 +602,18 @@ public class BeeMissileEntity extends BeeEntity {
                         && e.squaredDistanceTo(this) <= POISON_RADIUS * POISON_RADIUS
         );
 
+        // 收集并摧毁范围内的敌对弹射物（爆炸伤害可能无法摧毁特殊弹射物如凋灵之首）
+        double projectileKillRadius = EXPLOSION_POWER * 2.0; // 爆炸范围
+        List<Entity> projectileTargets = sw.getOtherEntities(
+                this,
+                new Box(getX() - projectileKillRadius, getY() - projectileKillRadius, getZ() - projectileKillRadius,
+                        getX() + projectileKillRadius, getY() + projectileKillRadius, getZ() + projectileKillRadius),
+                e -> e.isAlive()
+                        && !e.isSpectator()
+                        && e.squaredDistanceTo(this) <= projectileKillRadius * projectileKillRadius
+                        && isValidProjectileTarget(e)
+        );
+
         // 爆炸
         this.getWorld().createExplosion(
                 owner != null ? owner : this,
@@ -430,6 +621,13 @@ public class BeeMissileEntity extends BeeEntity {
                 EXPLOSION_POWER, false,
                 World.ExplosionSourceType.MOB
         );
+
+        // 主动摧毁弹射物（在爆炸后，确保它们被移除）
+        for (Entity projectile : projectileTargets) {
+            if (projectile.isAlive()) {
+                projectile.discard(); // 直接移除弹射物
+            }
+        }
 
         // 大量粒子（参考反应装甲附魔）
         sw.spawnParticles(ParticleTypes.EXPLOSION, getX(), getY(), getZ(), 2, 0.3d, 0.3d, 0.3d, 0.01d);
@@ -490,11 +688,22 @@ public class BeeMissileEntity extends BeeEntity {
         nbt.putDouble("BallisticVelZ", ballisticVelocity.z);
         if (ownerUuid != null) nbt.putUuid("Owner", ownerUuid);
         if (targetUuid != null) nbt.putUuid("Target", targetUuid);
+        nbt.putInt("IgnoreBlockCollisionTicks", ignoreBlockCollisionTicks);
         if (hoverAnchor != null) {
             nbt.putDouble("HoverX", hoverAnchor.x);
             nbt.putDouble("HoverY", hoverAnchor.y);
             nbt.putDouble("HoverZ", hoverAnchor.z);
             nbt.putDouble("HoverAngle", hoverAngle);
+        }
+        if (previousLOS != null) {
+            nbt.putDouble("PrevLOSX", previousLOS.x);
+            nbt.putDouble("PrevLOSY", previousLOS.y);
+            nbt.putDouble("PrevLOSZ", previousLOS.z);
+        }
+        if (previousTargetPos != null) {
+            nbt.putDouble("PrevTargetX", previousTargetPos.x);
+            nbt.putDouble("PrevTargetY", previousTargetPos.y);
+            nbt.putDouble("PrevTargetZ", previousTargetPos.z);
         }
     }
 
@@ -506,9 +715,16 @@ public class BeeMissileEntity extends BeeEntity {
         ballisticVelocity = new Vec3d(nbt.getDouble("BallisticVelX"), nbt.getDouble("BallisticVelY"), nbt.getDouble("BallisticVelZ"));
         if (nbt.containsUuid("Owner")) ownerUuid = nbt.getUuid("Owner");
         if (nbt.containsUuid("Target")) targetUuid = nbt.getUuid("Target");
+        ignoreBlockCollisionTicks = nbt.getInt("IgnoreBlockCollisionTicks");
         if (nbt.contains("HoverX")) {
             hoverAnchor = new Vec3d(nbt.getDouble("HoverX"), nbt.getDouble("HoverY"), nbt.getDouble("HoverZ"));
             hoverAngle = nbt.getDouble("HoverAngle");
+        }
+        if (nbt.contains("PrevLOSX")) {
+            previousLOS = new Vec3d(nbt.getDouble("PrevLOSX"), nbt.getDouble("PrevLOSY"), nbt.getDouble("PrevLOSZ"));
+        }
+        if (nbt.contains("PrevTargetX")) {
+            previousTargetPos = new Vec3d(nbt.getDouble("PrevTargetX"), nbt.getDouble("PrevTargetY"), nbt.getDouble("PrevTargetZ"));
         }
     }
 }

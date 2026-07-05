@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "loaded=false": {
+      "model": "autoenchants:block/bee_nest_vls"
+    },
+    "loaded=true": {
+      "model": "autoenchants:block/bee_nest_vls_loaded"
+    }
+  }
+}

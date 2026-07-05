@@ -1,6 +1,8 @@
 package com.example.autoenchants;
 
 import com.example.autoenchants.enchant.AirburstTridentEnchantment;
+import com.example.autoenchants.block.BeeNestVlsBlock;
+import com.example.autoenchants.block.entity.BeeNestVlsBlockEntity;
 import com.example.autoenchants.enchant.AutomaticEnchantment;
 import com.example.autoenchants.enchant.BlastFireworkEnchantment;
 import com.example.autoenchants.enchant.CriticalFangsEnchantment;
@@ -41,12 +43,16 @@ import com.example.autoenchants.effect.RetroBootsCooldownEffect;
 import com.example.autoenchants.effect.SquidIronFistCooldownEffect;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.itemgroup.v1.FabricItemGroup;
+import net.fabricmc.fabric.api.object.builder.v1.block.FabricBlockSettings;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.event.player.UseItemCallback;
+import net.minecraft.block.Block;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.entity.BlockEntityType;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.EnchantmentLevelEntry;
 import net.minecraft.enchantment.Enchantment;
@@ -61,6 +67,7 @@ import net.minecraft.entity.passive.AllayEntity;
 import net.minecraft.entity.passive.SnowGolemEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.CrossbowItem;
+import net.minecraft.item.BlockItem;
 import net.minecraft.item.CompassItem;
 import net.minecraft.item.EnchantedBookItem;
 import net.minecraft.item.Item;
@@ -113,6 +120,9 @@ public class AutoEnchantsMod implements ModInitializer {
     public static Item ARMOR_PIERCING_ARROW_ITEM;
     public static Item BEE_MISSILE_ITEM;
     public static Item STINGER_MISSILE_ITEM;
+    public static Block BEE_NEST_VLS_BLOCK;
+    public static Item BEE_NEST_VLS_ITEM;
+    public static BlockEntityType<BeeNestVlsBlockEntity> BEE_NEST_VLS_BLOCK_ENTITY;
     public static EntityType<ArmorPiercingArrowEntity> ARMOR_PIERCING_ARROW;
     public static EntityType<PeekabooShellEntity> PEEKABOO_SHELL;
     public static EntityType<PeekabooSparkEntity> PEEKABOO_SPARK;
@@ -397,6 +407,24 @@ public class AutoEnchantsMod implements ModInitializer {
                 new StingerMissileItem(new Item.Settings().maxCount(16))
         );
 
+        BEE_NEST_VLS_BLOCK = Registry.register(
+                Registries.BLOCK,
+                id("bee_nest_vls"),
+                new BeeNestVlsBlock(FabricBlockSettings.copyOf(Blocks.BEE_NEST))
+        );
+
+        BEE_NEST_VLS_ITEM = Registry.register(
+                Registries.ITEM,
+                id("bee_nest_vls"),
+                new BlockItem(BEE_NEST_VLS_BLOCK, new Item.Settings())
+        );
+
+        BEE_NEST_VLS_BLOCK_ENTITY = Registry.register(
+                Registries.BLOCK_ENTITY_TYPE,
+                id("bee_nest_vls"),
+                BlockEntityType.Builder.create(BeeNestVlsBlockEntity::new, BEE_NEST_VLS_BLOCK).build(null)
+        );
+
         SUPER_SNOW_GOLEM_SPAWN_EGG = Registry.register(
                 Registries.ITEM,
                 id("super_snow_golem_spawn_egg"),
@@ -421,6 +449,7 @@ public class AutoEnchantsMod implements ModInitializer {
                             entries.add(StingerMissileItem.createStack(1));
                             entries.add(StingerMissileItem.createStack(2));
                             entries.add(StingerMissileItem.createStack(3));
+                            entries.add(BEE_NEST_VLS_ITEM);
                             entries.add(PEEKABOO_SHELL_SPAWN_EGG);
                             entries.add(SUPER_SNOW_GOLEM_SPAWN_EGG);
                             entries.add(BOMBER_ALLAY_SPAWN_EGG);
